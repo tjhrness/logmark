@@ -170,8 +170,8 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 **Step 14 — Observations CSV builder**
 
-- [ ] Built
-- [ ] Tests green
+- [x] Built
+- [x] Tests green
 - [ ] Verify: header is exactly `field,chart,rule_no,rule_name,direction,points,values,line_or_window,description`
 
 **Step 15 — Column-section HTML and the standalone report**
