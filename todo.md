@@ -151,8 +151,8 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 **Step 12 — Cell values and `parse_csv` (V08, V09)**
 
-- [ ] Built
-- [ ] Tests green
+- [x] Built
+- [x] Tests green
 - [ ] Verify: `nan`, `1,234`, `$5`, `5%` and blank cells are all rejected; `-3.2e2` and `  12.5  ` accepted
 - [ ] Verify: a bad cell message gives both the Excel row **and** the point number
 - [ ] Verify: minimum is 3 rows (unless you changed it in 0.1); the message no longer says it's "needed to draw a Moving Range chart"
