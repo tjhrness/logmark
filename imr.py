@@ -176,6 +176,109 @@ class ValidationErrors(Exception):
 
 # ===== SECTION 3: PARSING AND VALIDATION =====
 
+_UNSAFE_NAME_CHARS = re.compile(r"[^A-Za-z0-9_-]")
+
+
+def sanitise_name(text: str) -> str:
+    """Replace every character outside A-Z a-z 0-9 _ - with "_" (SPEC.md §6.6)."""
+    return _UNSAFE_NAME_CHARS.sub("_", text)
+
+
+def stem_of(filename: str) -> str:
+    """The filename without directory or final extension, sanitised (SPEC.md §6.6)."""
+    base = re.split(r"[\\/]", filename)[-1]
+    if "." in base:
+        base = base.rsplit(".", 1)[0]
+    return sanitise_name(base)
+
+
+def _fatal(code: str, message: str) -> ValidationIssue:
+    return ValidationIssue(code, "F", message)
+
+
+def read_table(
+    data: bytes, filename: str
+) -> tuple[list[str], list[list[str]], list[ValidationIssue]]:
+    """Turn uploaded bytes into (header, data_rows, issues) (SPEC.md §3.1, §3.2, §7.1).
+
+    V02-V04 stop everything and are raised. V05-V07 are returned with the rows so
+    that the cell checks can still run and every problem is reported in one go.
+    """
+    if not filename.lower().endswith(".csv"):
+        raise ValidationErrors([_fatal(
+            "V02",
+            f"{filename} is not a .csv file. "
+            "Only comma-separated .csv files are accepted.",
+        )])
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise ValidationErrors([_fatal(
+            "V03",
+            f"{filename} is larger than 10 MB. "
+            "This tool is built for files of a few hundred rows.",
+        )])
+    if data.startswith(b"\xef\xbb\xbf"):
+        data = data[3:]
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise ValidationErrors([_fatal(
+            "V04",
+            f"{filename} could not be read as UTF-8 text. "
+            'Re-save it from Excel as "CSV UTF-8" and try again.',
+        )]) from None
+
+    rows = list(csv.reader(io.StringIO(text, newline=""), delimiter=","))
+    # Blank lines after the last data row are left behind by Excel and editors.
+    while rows and not rows[-1]:
+        rows.pop()
+
+    issues: list[ValidationIssue] = []
+    header = [cell.strip() for cell in rows[0]] if rows else []
+    data_rows = rows[1:]
+
+    imr_names = [name for name in header if name.startswith(IMR_PREFIX)]
+    if not imr_names:
+        present = ", ".join(header) if header else "(none)"
+        issues.append(_fatal(
+            "V05",
+            f"No column starting with {IMR_PREFIX} was found. "
+            f"Columns present: {present}. "
+            f"Rename the columns to chart so they start with {IMR_PREFIX}.",
+        ))
+
+    seen: set[str] = set()
+    reported: set[str] = set()
+    for name in imr_names:
+        if name in seen and name not in reported:
+            reported.add(name)
+            issues.append(_fatal(
+                "V06",
+                f"Column name {name} appears more than once. "
+                f"Make every {IMR_PREFIX} column name unique.",
+            ))
+        seen.add(name)
+
+    ragged = [
+        (row_number, len(row))
+        for row_number, row in enumerate(data_rows, start=2)
+        if len(row) != len(header)
+    ]
+    for row_number, cell_count in ragged[:MAX_BAD_CELLS_LISTED]:
+        issues.append(_fatal(
+            "V07",
+            f"Row {row_number} has {cell_count} cells but the header has "
+            f"{len(header)}. Fix the row (a stray comma or a missing value "
+            "is the usual cause).",
+        ))
+    if len(ragged) > MAX_BAD_CELLS_LISTED:
+        issues.append(_fatal(
+            "V07",
+            f"… and {len(ragged) - MAX_BAD_CELLS_LISTED} more rows "
+            "with the wrong number of cells.",
+        ))
+
+    return header, data_rows, issues
+
 
 # ===== SECTION 4: STATISTICS =====
 
