@@ -108,8 +108,8 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 **Step 6 — Maximal runs and Rule 2**
 
-- [ ] Built
-- [ ] Tests green
+- [x] Built
+- [x] Tests green
 - [ ] Verify: the summary confirms twelve points above the mean give **one** entry, not four
 
 **Step 7 — Rules 7 and 8**
