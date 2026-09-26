@@ -300,7 +300,7 @@ Extra checks worth two minutes each:
 - [x] The answer key was independently verified by you in Excel (Step 21)
 - [x] The §12.9 checklist passed (section 9 above)
 - [x] D1–D3 settled and recorded in SPEC.md v1.1 Appendix B
-- [ ] Final commit and `v1.0` tag in place — final commit done; tag still to be created on GitHub
+- [x] Final commit and `v1.0` tag in place — merge commit `dd89732` on `main`, tagged `v1.0`
 
 ---
 
