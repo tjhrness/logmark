@@ -845,6 +845,38 @@ def render_chart(series: Series, stats: ChartStats, pattern_pts: set[int], title
 
 # ===== SECTION 7: REPORT AND CSV BUILDERS =====
 
+OBSERVATIONS_CSV_HEADER = ["field", "chart", "rule_no", "rule_name", "direction",
+                           "points", "values", "line_or_window", "description"]
+
+
+def points_field(points: list[int]) -> str:
+    """CSV points column (SPEC.md §6.7): "17", "14-25" for a consecutive run, else "7,9"."""
+    if len(points) == 1:
+        return str(points[0])
+    if all(b == a + 1 for a, b in zip(points, points[1:])):
+        return f"{points[0]}-{points[-1]}"
+    return ",".join(str(p) for p in points)
+
+
+def build_observations_csv(columns: list[ColumnResult]) -> str:
+    """The observations CSV (SPEC.md §6.7): columns in file order, I chart before MR.
+    Rejected columns contribute no rows; warnings never appear."""
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow(OBSERVATIONS_CSV_HEADER)
+    for col in columns:
+        if col.rejected_reason is not None:
+            continue
+        for chart in (col.individuals, col.moving_range):
+            for o in chart.observations:
+                writer.writerow([
+                    o.field, o.chart, o.rule_no, o.rule_name, o.direction,
+                    points_field(o.points), ";".join(fmt(v) for v in o.values),
+                    o.line_or_window, o.description,
+                ])
+    return buf.getvalue()
+
+
 
 # ===== SECTION 8: FLASK APP AND ROUTES =====
 
