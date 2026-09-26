@@ -320,3 +320,94 @@ def test_downloads_are_404_after_failed_upload(client):
         response = client.get(path)
         assert response.status_code == 404
         assert page(response) == NOTHING_YET
+
+
+# ----- Startup (SPEC.md §2.2, §8, §9.5) -----
+
+import socket
+
+import flask
+
+
+def free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+def test_find_free_port_skips_a_busy_port_and_returns_none_when_all_busy():
+    busy = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        busy.bind(("127.0.0.1", 0))
+        busy.listen(1)
+        busy_port = busy.getsockname()[1]
+        other_port = free_port()
+        assert other_port != busy_port
+        assert imr.find_free_port(candidates=[busy_port, other_port]) == other_port
+        assert imr.find_free_port(candidates=[busy_port]) is None
+    finally:
+        busy.close()
+
+
+def test_main_starts_flask_on_localhost_and_opens_the_browser(monkeypatch):
+    opened = []
+    runs = []
+    later = []
+    monkeypatch.setattr(imr, "find_free_port", lambda *args, **kwargs: 5055)
+    monkeypatch.setattr(imr.webbrowser, "open", lambda url, *args, **kwargs: opened.append(url))
+    monkeypatch.setattr(imr, "open_browser_later",
+                        lambda url, delay=1.0: (later.append(url), imr.webbrowser.open(url)))
+    monkeypatch.setattr(flask.Flask, "run", lambda self, *args, **kwargs: runs.append(kwargs))
+    assert imr.main() == 0
+    assert later == ["http://127.0.0.1:5055/"]
+    assert opened == ["http://127.0.0.1:5055/"]
+    assert len(runs) == 1
+    assert runs[0]["host"] == "127.0.0.1"
+    assert runs[0]["port"] == 5055
+    assert runs[0]["debug"] is False
+
+
+def test_open_browser_later_uses_a_daemon_timer(monkeypatch):
+    started = []
+
+    class FakeTimer:
+        def __init__(self, delay, function, args=None, kwargs=None):
+            self.delay = delay
+            self.function = function
+            self.args = args or []
+            self.daemon = False
+
+        def start(self):
+            started.append(self)
+
+    opened = []
+    monkeypatch.setattr(imr.threading, "Timer", FakeTimer)
+    monkeypatch.setattr(imr.webbrowser, "open", lambda url, *args, **kwargs: opened.append(url))
+    imr.open_browser_later("http://127.0.0.1:5055/", delay=1.0)
+    assert len(started) == 1
+    timer = started[0]
+    assert timer.daemon is True
+    assert timer.delay == 1.0
+    timer.function(*timer.args)
+    assert opened == ["http://127.0.0.1:5055/"]
+
+
+def test_main_reports_busy_ports_and_returns_one(monkeypatch, capsys):
+    runs = []
+    monkeypatch.setattr(imr, "find_free_port", lambda *args, **kwargs: None)
+    monkeypatch.setattr(flask.Flask, "run", lambda self, *args, **kwargs: runs.append(kwargs))
+    assert imr.main() == 1
+    out = capsys.readouterr().out
+    assert "Ports 5000-5010 are all in use. Close another program using them and try again." in out
+    assert runs == []
+
+
+def test_main_prints_the_url_in_plain_ascii(monkeypatch, capsys):
+    monkeypatch.setattr(imr, "find_free_port", lambda *args, **kwargs: 5055)
+    monkeypatch.setattr(imr, "open_browser_later", lambda url, delay=1.0: None)
+    monkeypatch.setattr(flask.Flask, "run", lambda self, *args, **kwargs: None)
+    assert imr.main() == 0
+    out = capsys.readouterr().out
+    assert ("IMR Control Chart Tool is running at http://127.0.0.1:5055/ - keep this window open; "
+            "press Ctrl+C to stop.") in out
+    assert out.isascii()

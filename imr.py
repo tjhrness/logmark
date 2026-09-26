@@ -1213,5 +1213,46 @@ def unexpected_error(filename: str) -> Response:
 
 # ===== SECTION 9: ENTRY POINT =====
 
+PORTS_BUSY_MESSAGE = (
+    f"Ports {PORT_CANDIDATES[0]}-{PORT_CANDIDATES[-1]} are all in use. "
+    "Close another program using them and try again."
+)
+
+
+def find_free_port(host: str = "127.0.0.1", candidates=PORT_CANDIDATES) -> int | None:
+    """Return the first candidate port that can be bound on host, or None if all are busy."""
+    for port in candidates:
+        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            probe.bind((host, port))
+        except OSError:
+            continue
+        finally:
+            probe.close()
+        return port
+    return None
+
+
+def open_browser_later(url: str, delay: float = 1.0) -> None:
+    """Open url in the default browser after delay seconds, from a background thread."""
+    timer = threading.Timer(delay, webbrowser.open, args=[url])
+    timer.daemon = True
+    timer.start()
+
+
+def main() -> int:
+    """Start the tool on the first free local port and open the upload page (SPEC.md §9.5)."""
+    port = find_free_port()
+    if port is None:
+        print(PORTS_BUSY_MESSAGE)
+        return 1
+    url = f"http://127.0.0.1:{port}/"
+    print(f"IMR Control Chart Tool is running at {url} - keep this window open; "
+          "press Ctrl+C to stop.")
+    open_browser_later(url)
+    create_app().run(host="127.0.0.1", port=port, debug=False, use_reloader=False, threaded=False)
+    return 0
+
+
 if __name__ == "__main__":
-    print("IMR Control Chart Tool: the server is not built yet. Run pytest.")
+    sys.exit(main())

@@ -171,3 +171,7 @@ def test_validation_errors():
     text = str(error)
     assert "First problem." in text
     assert "Second problem." in text
+
+
+def test_never_binds_to_all_interfaces():
+    assert "0.0.0.0" not in SOURCE
