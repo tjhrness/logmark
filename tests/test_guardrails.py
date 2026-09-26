@@ -175,3 +175,89 @@ def test_validation_errors():
 
 def test_never_binds_to_all_interfaces():
     assert "0.0.0.0" not in SOURCE
+
+
+# ----- Step 22 audit: further mechanical checks of CLAUDE.md -----
+
+import sys
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def import_lines() -> list[tuple[int, str]]:
+    return [(i, line.strip()) for i, line in enumerate(SOURCE.splitlines())
+            if re.match(r"\s*(import|from)\s+\w", line)]
+
+
+def imported_top_level_modules() -> set[str]:
+    modules = set()
+    for _, line in import_lines():
+        match = re.match(r"from\s+([\w.]+)\s+import\b", line)
+        if match:
+            modules.add(match.group(1).split(".")[0])
+            continue
+        for part in re.match(r"import\s+(.+)", line).group(1).split(","):
+            modules.add(part.strip().split()[0].split(".")[0])
+    return modules
+
+
+def test_application_is_one_python_file_at_the_root():
+    assert sorted(p.name for p in REPO_ROOT.glob("*.py")) == ["imr.py"]
+
+
+def test_flask_imported_only_inside_section_8():
+    lines = SOURCE.splitlines()
+    start, end = banner_line_positions()[7], banner_line_positions()[8]
+    flask_lines = [i for i, line in import_lines() if re.match(r"(import|from)\s+flask\b", line)]
+    assert flask_lines, "Flask is never imported"
+    assert all(start < i < end for i in flask_lines), [lines[i] for i in flask_lines]
+
+
+def test_only_standard_library_flask_and_matplotlib_imported():
+    allowed = set(sys.stdlib_module_names) | {"flask", "matplotlib"}
+    assert imported_top_level_modules() <= allowed, imported_top_level_modules() - allowed
+
+
+def test_matplotlib_agg_backend_chosen_before_pyplot():
+    assert 'matplotlib.use("Agg")' in SOURCE
+    assert SOURCE.index('matplotlib.use("Agg")') < SOURCE.index("import matplotlib.pyplot")
+
+
+def test_no_network_client_modules_imported():
+    forbidden = {"urllib", "http", "requests", "httpx", "ftplib", "smtplib", "ssl"}
+    assert imported_top_level_modules().isdisjoint(forbidden)
+
+
+def test_only_url_is_the_local_address_in_section_9():
+    section_9 = banner_line_positions()[8]
+    lines = SOURCE.splitlines()
+    for i, line in enumerate(lines):
+        for match in re.finditer(r"https?://[^\s\"'{]*", line):
+            assert match.group(0) == "http://127.0.0.1:", line
+            assert i > section_9, line
+
+
+def test_server_binds_to_localhost_only():
+    hosts = re.findall(r"host\s*[:=]\s*(?:str\s*=\s*)?\"([^\"]*)\"", SOURCE)
+    assert hosts and set(hosts) == {"127.0.0.1"}
+
+
+def test_writes_no_files():
+    assert re.search(r"(?<![\w.])open\(", SOURCE) is None
+    for forbidden in (".write_text(", ".write_bytes(", "os.remove", "shutil", "tempfile",
+                      "NamedTemporaryFile", "mkdir("):
+        assert forbidden not in SOURCE, forbidden
+    for call in re.findall(r"savefig\(([^,]+),", SOURCE):
+        assert call.strip() == "buf", call
+
+
+def test_no_unicode_minus_sign():
+    assert "−" not in SOURCE
+
+
+def test_mr_chart_runs_every_rule_not_just_rule_1():
+    # A straight line gives constant moving ranges: Rule 7 must fire on the MR chart.
+    values = [float(v) for v in range(1, 40, 2)]
+    parsed = imr.ParsedFile("f.csv", "f", len(values), [imr.ParsedColumn("IMR_Field_L", 0, values)])
+    column = imr.analyse(parsed).columns[0]
+    assert {o.rule_no for o in column.moving_range.observations} == {7}

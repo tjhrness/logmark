@@ -736,3 +736,58 @@ def test_detect_all_ordering_e4():
     assert rules == sorted(rules)
     firsts = [o.points[0] for o in obs if o.rule_no == 1]
     assert firsts == sorted(firsts) and len(set(firsts)) == len(firsts)
+
+
+# ===== Step 22 audit: gaps against SPEC.md §12.3 =====
+
+def test_rule_6_below_side():
+    obs = imr.rule_6(_series([-1.5, -1.5, 0, -1.5, -1.5]), L)
+    assert len(obs) == 1
+    assert obs[0].direction == "below"
+    assert obs[0].points == [1, 2, 4, 5]
+    assert obs[0].line_or_window == "-1 SD=-1.000; window 1-5"
+    assert obs[0].description == (
+        "Rule 6 — Four of five points beyond 1 SD: points 1, 2, 4, 5 "
+        "(values -1.500, -1.500, -1.500, -1.500) are below the -1 SD line (-1.000); "
+        "window 1–5.")
+
+
+def test_rule_6_overlapping_windows_merge():
+    # Windows 1-5 and 2-6 both qualify; window 3-7 does not.
+    obs = imr.rule_6(_series([1.5, 1.5, 0, 1.5, 1.5, 1.5, 0, 0, 0]), L)
+    assert len(obs) == 1
+    assert obs[0].points == [1, 2, 4, 5, 6]
+    assert obs[0].span == (1, 6)
+    assert 3 not in obs[0].points
+
+
+def test_rule_6_adjacent_non_overlapping_windows_stay_separate():
+    # Only windows 1-5 and 6-10 qualify.
+    obs = imr.rule_6(_series([1.5, 1.5, 1.5, 1.5, 0, 0, 1.5, 1.5, 1.5, 1.5]), L)
+    assert len(obs) == 2
+    assert obs[0].points == [1, 2, 3, 4]
+    assert obs[0].span == (1, 5)
+    assert obs[1].points == [7, 8, 9, 10]
+    assert obs[1].span == (6, 10)
+
+
+def test_rule_6_opposite_sides_do_not_count_together():
+    assert imr.rule_6(_series([1.5, 1.5, -1.5, -1.5, 0]), L) == []
+
+
+def test_rule_8_point_on_line_in_middle_splits_run():
+    # Without the on-line point, eleven points beyond 1 SD fire Rule 8.
+    assert len(imr.rule_8(_series(_alternate(1.5, -1.5, 11)), L)) == 1
+    # A point exactly on +1 SD at position 6 leaves two runs of 5: nothing.
+    vals = _alternate(1.5, -1.5, 5) + [1.0] + _alternate(-1.5, 1.5, 5)
+    assert imr.rule_8(_series(vals), L) == []
+
+
+def test_rule_8_point_within_one_sd_in_middle_splits_run():
+    vals = _alternate(1.5, -1.5, 5) + [0.5] + _alternate(-1.5, 1.5, 5)
+    assert imr.rule_8(_series(vals), L) == []
+
+
+def test_rule_7_point_beyond_one_sd_in_middle_splits_run():
+    vals = _alternate(0.5, -0.5, 8) + [1.5] + _alternate(0.5, -0.5, 8)
+    assert imr.rule_7(_series(vals), L) == []

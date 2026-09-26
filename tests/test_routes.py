@@ -411,3 +411,40 @@ def test_main_prints_the_url_in_plain_ascii(monkeypatch, capsys):
     assert ("IMR Control Chart Tool is running at http://127.0.0.1:5055/ - keep this window open; "
             "press Ctrl+C to stop.") in out
     assert out.isascii()
+
+
+# ----- Step 22 audit: the bundled sample through POST /analyze (SPEC.md §12.7) -----
+
+from pathlib import Path
+
+SAMPLE_PATH = Path(__file__).resolve().parent.parent / "sample" / "sample_imr.csv"
+
+
+def test_sample_upload_shows_every_column_links_and_no_rejections(client):
+    data = SAMPLE_PATH.read_bytes()
+    response = upload(client, data, "sample_imr.csv")
+    assert response.status_code == 200
+    body = page(response)
+    header = data.decode("utf-8").splitlines()[0].split(",")
+    imr_names = [name for name in header if name.startswith("IMR_Field")]
+    assert len(imr_names) == 9
+    for name in imr_names:
+        assert f"<h2>{name}</h2>" in body
+    assert "<h2>Notes</h2>" not in body
+    assert 'class="rejected"' not in body
+    assert body.count('href="/download/report"') == 1
+    assert body.count('href="/download/observations"') == 1
+    for i, column in enumerate(imr.LAST_RESULT.columns):
+        assert column.rejected_reason is None
+        for chart in ("I", "MR"):
+            assert body.count(f'href="/download/png/{i}/{chart}"') == 1
+
+
+# ----- Step 22 audit: offline (CLAUDE.md rule 4, SPEC.md §2.3) -----
+
+def test_page_and_report_reference_no_external_asset(client):
+    body = page(upload(client, SAMPLE_PATH.read_bytes(), "sample_imr.csv"))
+    report = imr.LAST_RESULT.report_html
+    for text in (body, page(client.get("/")), report):
+        for forbidden in ("http://", "https://", "<script src", "<link", "//cdn", "url("):
+            assert forbidden not in text, forbidden

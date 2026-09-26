@@ -152,3 +152,33 @@ def test_deterministic_same_input_twice():
     for a, b in zip(first.columns, second.columns):
         assert a.individuals.png == b.individuals.png
         assert a.moving_range.png == b.moving_range.png
+
+
+# ----- Step 22 audit: performance (SPEC.md §2.3) -----
+
+import time
+
+
+def performance_csv() -> bytes:
+    columns = 10
+    names = [f"IMR_Field_C{c}" for c in range(columns)]
+    rows = [",".join(names)]
+    for i in range(100):
+        rows.append(",".join(repr(50 + ((i * 7 + c * 3) % 11) / 4) for c in range(columns)))
+    return ("\n".join(rows) + "\n").encode("utf-8")
+
+
+def test_ten_columns_by_one_hundred_rows_is_fast_enough():
+    data = performance_csv()
+    start = time.perf_counter()
+    parsed = imr.parse_csv(data, "perf.csv")
+    parsed_at = time.perf_counter()
+    result = imr.analyse(parsed)
+    done = time.perf_counter()
+    parse_seconds = parsed_at - start
+    total_seconds = done - start
+    print(f"\nperformance: parse_csv {parse_seconds:.3f} s, parse_csv + analyse {total_seconds:.3f} s")
+    assert len(result.columns) == 10
+    assert all(col.n == 100 and col.rejected_reason is None for col in result.columns)
+    assert parse_seconds < 1.0
+    assert total_seconds < 5.0

@@ -335,3 +335,23 @@ def test_v02_propagates_from_parse_csv_unchanged():
     issues = exc.value.issues
     assert codes(issues) == ["V02"]
     assert issues[0].severity == "F"
+
+
+# ----- Step 22 audit: cell-level acceptance inside a whole file (SPEC.md §12.5) -----
+
+def test_parse_csv_accepts_padded_and_exponent_cells():
+    data = b"IMR_Field_A,Label\n 12.5 ,a\n-3.2e2,b\n  7  ,c\n"
+    parsed = imr.parse_csv(data, "f.csv")
+    assert parsed.columns[0].values == [12.5, -320.0, 7.0]
+
+
+def test_parse_csv_with_bom_keeps_first_column_name():
+    data = b"\xef\xbb\xbfIMR_Field_A,Label\n1,a\n2,b\n3,c\n"
+    parsed = imr.parse_csv(data, "f.csv")
+    assert [c.name for c in parsed.columns] == ["IMR_Field_A"]
+
+
+def test_parse_csv_lower_case_prefix_column_is_not_charted():
+    data = b"IMR_Field_A,imr_field_x\n1,junk\n2,junk\n3,junk\n"
+    parsed = imr.parse_csv(data, "f.csv")
+    assert [c.name for c in parsed.columns] == ["IMR_Field_A"]

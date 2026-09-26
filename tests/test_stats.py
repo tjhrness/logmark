@@ -184,3 +184,27 @@ def test_mr_chart_stats_identical_values_give_zero_sigma():
 
 def test_lines_below_zero_none_on_positive_i_chart():
     assert imr.lines_below_zero(imr.i_chart_stats([50, 51, 49, 50, 52])) == []
+
+
+# ----- Step 22 audit: MR-bar on hand-picked series (SPEC.md §12.1) -----
+
+@pytest.mark.parametrize(
+    "values, expected_mr_bar",
+    [
+        ([2, 5, 3, 8], (3 + 2 + 5) / 3),
+        ([-4, -1, -6, -6, -2], (3 + 5 + 0 + 4) / 4),
+        ([0.25, 0.75, -0.5, 1.0], (0.5 + 1.25 + 1.5) / 3),
+        ([-2.5, 2.5, -2.5], (5 + 5) / 2),
+    ],
+)
+def test_mr_bar_hand_computed(values, expected_mr_bar):
+    assert imr.i_chart_stats(values).mr_bar == pytest.approx(expected_mr_bar)
+    assert imr.mr_chart_stats(values).mr_bar == pytest.approx(expected_mr_bar)
+    assert imr.mr_chart_stats(values).mean == pytest.approx(expected_mr_bar)
+
+
+def test_moving_range_series_point_numbers_run_two_to_n():
+    values = [3.0, -1.0, 4.0, 1.5, -5.0, 9.0, 2.0]
+    series = imr.moving_range_series(values)
+    assert series.point_numbers == list(range(2, len(values) + 1))
+    assert series.values == [abs(values[i] - values[i - 1]) for i in range(1, len(values))]

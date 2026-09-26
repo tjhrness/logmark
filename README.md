@@ -63,6 +63,7 @@ try again.
 - All other columns are ignored, so they can hold dates, notes or anything else.
 - You need **at least 3 rows** of data; **20 or more** is recommended. With fewer than 20 the tool still works but shows a warning, because the lines are less reliable.
 - Two `IMR_Field` columns may not have exactly the same header.
+- A column in which every value is the same cannot be charted (there is no variation, so no lines can be drawn). Its section says so, and the other columns are charted as normal.
 
 If anything is wrong with the file, the page lists every problem it found,
 says where it is, and what to change.
@@ -144,4 +145,4 @@ With the environment switched on (`.venv\Scripts\activate`), type:
 pytest
 ```
 
-A final line such as `281 passed` means everything is working.
+A final line such as `324 passed` means everything is working.
