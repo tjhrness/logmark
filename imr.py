@@ -208,6 +208,33 @@ def i_chart_stats(values: list[float]) -> ChartStats:
     return ChartStats(n=len(values), mean=mean, mr_bar=mr_bar, sigma=sigma, lines=lines_for(mean, sigma))
 
 
+def individuals_series(values: list[float]) -> Series:
+    """The I-chart series: points 1 ... N."""
+    return Series(point_numbers=list(range(1, len(values) + 1)), values=list(values))
+
+
+def moving_range_series(values: list[float]) -> Series:
+    """The MR-chart series: points 2 ... N, aligned with the I chart. There is no MR point 1."""
+    return Series(point_numbers=list(range(2, len(values) + 1)), values=moving_ranges(values))
+
+
+def mr_chart_stats(values: list[float]) -> ChartStats:
+    """Moving Range chart statistics from the ORIGINAL column values (SPEC.md §4.3).
+
+    Centred on MR-bar, sigma = MR_SIGMA_FACTOR x MR-bar. Identical values give
+    mr_bar = sigma = 0.0; the caller decides what a zero sigma means.
+    """
+    mrs = moving_ranges(values)
+    mr_bar = mean_of(mrs)
+    sigma = MR_SIGMA_FACTOR * mr_bar
+    return ChartStats(n=len(mrs), mean=mr_bar, mr_bar=mr_bar, sigma=sigma, lines=lines_for(mr_bar, sigma))
+
+
+def lines_below_zero(stats: ChartStats) -> list[int]:
+    """The k values, ascending, whose line is strictly below 0 (computed, but not drawn)."""
+    return sorted(k for k, value in stats.lines.items() if value < 0)
+
+
 def fmt(x: float) -> str:
     """Display a number to exactly DECIMALS places, never as "-0.000". Display only."""
     text = f"{x:.{DECIMALS}f}"

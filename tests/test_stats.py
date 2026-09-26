@@ -114,3 +114,73 @@ def test_fmt(value, text):
 
 def test_fmt_tiny_negative_does_not_print_negative_zero():
     assert imr.fmt(-0.0001) == "0.000"
+
+
+# ----- chart series (Step 3) -----
+
+def test_individuals_series():
+    series = imr.individuals_series([1, 4, 2, 2, 9])
+    assert series.point_numbers == [1, 2, 3, 4, 5]
+    assert series.values == [1, 4, 2, 2, 9]
+
+
+def test_moving_range_series_numbered_from_two():
+    series = imr.moving_range_series([1, 4, 2, 2, 9])
+    assert series.values == [3, 2, 0, 7]
+    assert series.point_numbers == [2, 3, 4, 5]
+
+
+def test_moving_range_series_one_value_raises():
+    with pytest.raises(ValueError):
+        imr.moving_range_series([5.0])
+
+
+# ----- mr_chart_stats (Step 3) -----
+
+def test_mr_chart_stats_simple_series():
+    stats = imr.mr_chart_stats([1, 4, 2, 2, 9])
+    assert stats.n == 4
+    assert stats.mean == pytest.approx(3.0)
+    assert stats.mr_bar == pytest.approx(3.0)
+    assert stats.sigma == pytest.approx(0.7557 * 3.0)
+    assert stats.sigma == pytest.approx(2.2671, abs=1e-4)
+    expected = {3: 9.8013, 1: 5.2671, -1: 0.7329, -2: -1.5342, -3: -3.8013}
+    for k, value in expected.items():
+        assert stats.lines[k] == pytest.approx(value, abs=1e-4)
+    assert sorted(stats.lines) == [-3, -2, -1, 0, 1, 2, 3]
+
+
+MIXED_TEN = [3.2, -1.5, 0.0, 7.75, 2.1, -4.3, 5.5, 1.25, -0.8, 6.0]
+
+
+def test_mr_chart_shares_mr_bar_with_i_chart():
+    assert imr.mr_chart_stats(MIXED_TEN).mr_bar == pytest.approx(imr.i_chart_stats(MIXED_TEN).mr_bar)
+
+
+def test_mr_chart_upper_limit_matches_textbook_d4():
+    stats = imr.mr_chart_stats(MIXED_TEN)
+    assert stats.mr_bar > 0
+    assert abs(stats.lines[3] - 3.267 * stats.mr_bar) <= 0.0002 * stats.mr_bar
+
+
+def test_mr_chart_lower_lines():
+    stats = imr.mr_chart_stats(MIXED_TEN)
+    assert imr.lines_below_zero(stats) == [-3, -2]
+    assert stats.lines[-1] > 0
+
+
+def test_straight_line_is_not_degenerate():
+    values = [1, 3, 5, 7, 9, 11]
+    assert imr.moving_ranges(values) == [2, 2, 2, 2, 2]
+    assert imr.mr_chart_stats(values).sigma == pytest.approx(0.7557 * 2)
+    assert imr.i_chart_stats(values).sigma == pytest.approx(2 / 1.128)
+
+
+def test_mr_chart_stats_identical_values_give_zero_sigma():
+    stats = imr.mr_chart_stats([5, 5, 5])
+    assert stats.mr_bar == 0.0
+    assert stats.sigma == 0.0
+
+
+def test_lines_below_zero_none_on_positive_i_chart():
+    assert imr.lines_below_zero(imr.i_chart_stats([50, 51, 49, 50, 52])) == []
