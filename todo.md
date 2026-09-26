@@ -114,8 +114,8 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 **Step 7 — Rules 7 and 8**
 
-- [ ] Built
-- [ ] Tests green
+- [x] Built
+- [x] Tests green
 - [ ] Verify: E14 (a point on the +1 SD line) does not fire Rule 7, and E9 (all points on ±1 SD) does not fire Rule 8
 
 **Step 8 — Rules 3 and 4**
