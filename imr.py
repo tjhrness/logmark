@@ -179,6 +179,43 @@ class ValidationErrors(Exception):
 
 # ===== SECTION 4: STATISTICS =====
 
+def mean_of(values: list[float]) -> float:
+    """Ordinary arithmetic mean."""
+    return statistics.mean(values)
+
+
+def moving_ranges(values: list[float]) -> list[float]:
+    """|x_i - x_(i-1)| for i = 2 ... N: N - 1 numbers (SPEC.md §4.1)."""
+    if len(values) < 2:
+        raise ValueError("At least 2 values are needed to compute moving ranges.")
+    return [abs(values[i] - values[i - 1]) for i in range(1, len(values))]
+
+
+def lines_for(centre: float, sigma: float) -> dict[int, float]:
+    """The seven lines centre + k x sigma, for k in LINE_KS."""
+    return {k: centre + k * sigma for k in LINE_KS}
+
+
+def i_chart_stats(values: list[float]) -> ChartStats:
+    """Individuals-chart statistics (SPEC.md §4.2): sigma = MR-bar / D2_CONSTANT.
+
+    Identical values give mr_bar = sigma = 0.0 and seven lines on the mean; the caller
+    decides what a zero sigma means.
+    """
+    mean = mean_of(values)
+    mr_bar = mean_of(moving_ranges(values))
+    sigma = mr_bar / D2_CONSTANT
+    return ChartStats(n=len(values), mean=mean, mr_bar=mr_bar, sigma=sigma, lines=lines_for(mean, sigma))
+
+
+def fmt(x: float) -> str:
+    """Display a number to exactly DECIMALS places, never as "-0.000". Display only."""
+    text = f"{x:.{DECIMALS}f}"
+    if text.startswith("-") and float(text) == 0:
+        text = text[1:]
+    return text
+
+
 
 # ===== SECTION 5: RULE ENGINE =====
 
