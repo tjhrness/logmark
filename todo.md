@@ -253,8 +253,8 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 **Step 22 — Final audit, pinning and tag**
 
-- [ ] Built
-- [ ] Tests green, including the performance test (10 columns × 100 rows in under 5 seconds)
+- [x] Built
+- [x] Tests green, including the performance test (10 columns × 100 rows in under 5 seconds)
 - [ ] Verify: the summary lists which §12 test-plan bullets needed new tests (and none failed)
 - [ ] Verify: the summary lists anything in CLAUDE.md that could not be checked automatically — check those by eye
 - [ ] Verify: it did not change `imr.py` (an audit step reports bugs; it doesn't fix them)
