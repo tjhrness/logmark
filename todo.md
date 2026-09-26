@@ -126,8 +126,8 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 **Step 9 — Rules 5 and 6**
 
-- [ ] Built
-- [ ] Tests green
+- [x] Built
+- [x] Tests green
 - [ ] Verify: E11 is one entry listing points 1, 3, 4 with window 1–5 (point 5 inside the window but not listed)
 - [ ] Verify: two windows that touch but don't overlap stay as two entries
 
