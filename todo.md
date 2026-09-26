@@ -84,8 +84,8 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 **Step 3 — MR series and MR-chart statistics**
 
-- [ ] Built
-- [ ] Tests green
+- [x] Built
+- [x] Tests green
 - [ ] Verify: the summary says MR point numbers start at 2
 - [ ] Verify: the MR chart is centred on the average moving range, sigma = 0.7557 × it, and the +3 SD line comes out at about 3.267 × the average moving range
 - [ ] Verify: a perfectly straight line is **not** treated as an error any more
