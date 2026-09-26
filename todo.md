@@ -232,8 +232,8 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 **Step 21 — Answer key and acceptance test (OWNER GATE — the AI does not commit)**
 
-- [ ] Built; files staged, **not committed**
-- [ ] Tests green
+- [x] Built; files staged, **not committed**
+- [x] Tests green
 - [ ] The AI's own hand check of Rule5 and Rule7 matched
 - [ ] **Your check in Excel, using `docs/answer_key_check.md` (about 30 minutes — Appendix C.1).** No STDEV.S anywhere — every line comes from the moving ranges:
   - [ ] IMR_Field_Rule5 (column E): `=AVERAGE(E2:E41)` matches the mean to 3 decimals
