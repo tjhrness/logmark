@@ -202,8 +202,8 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 **Step 18 — Downloads**
 
-- [ ] Built
-- [ ] Tests green
+- [x] Built
+- [x] Tests green
 - [ ] Verify: filenames follow `{file}_IMR_report.html`, `{file}_observations.csv`, `{file}_{column}_I.png` / `_MR.png`, with spaces turned into `_`
 
 **Step 19 — Entry point and README**
