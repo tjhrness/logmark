@@ -208,8 +208,8 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 **Step 19 — Entry point and README**
 
-- [ ] Built
-- [ ] Tests green
+- [x] Built
+- [x] Tests green
 - [ ] **First real run.** In the terminal, `python imr.py`: the browser opens by itself on the upload page, the console shows the address
 - [ ] Upload any small CSV of your own with an `IMR_Field_` column: charts appear with numbered points
 - [ ] Try the three downloads; each saves a file
