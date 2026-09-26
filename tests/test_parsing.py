@@ -188,3 +188,150 @@ def test_stem_of_windows_path():
 
 def test_stem_of_plain_name():
     assert imr.stem_of("Q3 data.csv") == "Q3_data"
+
+
+# ----- parse_number (SPEC.md §3.3) -----
+
+@pytest.mark.parametrize("text, expected", [
+    ("12.5", 12.5),
+    ("  12.5  ", 12.5),
+    ("-3.2e2", -320.0),
+    (".5", 0.5),
+    ("5.", 5.0),
+    ("+7", 7.0),
+    ("0", 0.0),
+])
+def test_parse_number_accepts_plain_numbers(text, expected):
+    assert imr.parse_number(text) == expected
+
+
+@pytest.mark.parametrize("text", [
+    "", "  ", "1,234", "$5", "5%", "abc", "nan", "NaN", "inf", "-Infinity",
+    "1e", "--1",
+])
+def test_parse_number_rejects_everything_else(text):
+    assert imr.parse_number(text) is None
+
+
+# ----- parse_csv -----
+
+def test_parse_csv_good_file_keeps_imr_columns_in_file_order():
+    data = (
+        b"Notes,IMR_Field_B,Other,IMR_Field_A\n"
+        b"a,1.5,x,10\n"
+        b"b,2,y,-20\n"
+        b"c,3e1,z,30.25\n"
+        b"d,4,w,0\n"
+    )
+    parsed = imr.parse_csv(data, "C:\\data\\My Line 1.csv")
+    assert isinstance(parsed, imr.ParsedFile)
+    assert parsed.source_filename == "C:\\data\\My Line 1.csv"
+    assert parsed.stem == "My_Line_1"
+    assert parsed.n_rows == 4
+    assert [c.name for c in parsed.columns] == ["IMR_Field_B", "IMR_Field_A"]
+    assert [c.index for c in parsed.columns] == [0, 1]
+    assert parsed.columns[0].values == [1.5, 2.0, 30.0, 4.0]
+    assert parsed.columns[1].values == [10.0, -20.0, 30.25, 0.0]
+    assert all(isinstance(v, float) for c in parsed.columns for v in c.values)
+
+
+def test_parse_csv_ignores_garbage_in_non_imr_columns():
+    data = (
+        b'Notes,IMR_Field_A\n'
+        b'"hello, world",1\n'
+        b',2\n'
+        b'nan,3\n'
+        b'"1,234 $5 5%",4\n'
+    )
+    parsed = imr.parse_csv(data, "notes.csv")
+    assert parsed.n_rows == 4
+    assert parsed.columns[0].values == [1.0, 2.0, 3.0, 4.0]
+
+
+def test_v08_blank_cell_names_column_row_and_point():
+    # A blank line in a one-column file is a ragged row (V07), so a second column
+    # is used to get a genuinely blank cell.
+    data = b"IMR_Field_A,Label\n1,a\n,b\n3,c\n4,d\n"
+    with pytest.raises(imr.ValidationErrors) as exc:
+        imr.parse_csv(data, "f.csv")
+    issues = exc.value.issues
+    assert codes(issues) == ["V08"]
+    assert issues[0].severity == "F"
+    assert issues[0].message == (
+        'Column IMR_Field_A, row 3 (point 2) contains "", which is not a '
+        "number. Every cell in an IMR_Field column must be a plain number."
+    )
+
+
+@pytest.mark.parametrize("bad", [b"nan", b'"1,234"'])
+def test_v08_rejects_nan_and_thousands_separator(bad):
+    data = b"IMR_Field_A,Label\n1,a\n" + bad + b",b\n3,c\n"
+    with pytest.raises(imr.ValidationErrors) as exc:
+        imr.parse_csv(data, "f.csv")
+    issues = exc.value.issues
+    assert codes(issues) == ["V08"]
+    shown = bad.decode().strip('"')
+    assert f'contains "{shown}"' in issues[0].message
+    assert "row 3 (point 2)" in issues[0].message
+
+
+def test_v08_several_bad_cells_reported_column_by_column():
+    data = (
+        b"IMR_Field_A,IMR_Field_B\n"
+        b"1,x\n"
+        b"abc,2\n"
+        b"3,y\n"
+        b"$4,4\n"
+    )
+    with pytest.raises(imr.ValidationErrors) as exc:
+        imr.parse_csv(data, "f.csv")
+    messages = [issue.message for issue in exc.value.issues]
+    assert codes(exc.value.issues) == ["V08"] * 4
+    assert messages[0].startswith('Column IMR_Field_A, row 3 (point 2) contains "abc"')
+    assert messages[1].startswith('Column IMR_Field_A, row 5 (point 4) contains "$4"')
+    assert messages[2].startswith('Column IMR_Field_B, row 2 (point 1) contains "x"')
+    assert messages[3].startswith('Column IMR_Field_B, row 4 (point 3) contains "y"')
+
+
+def test_v08_lists_twenty_cells_then_a_summary():
+    body = b"".join(b"bad\n" for _ in range(25))
+    with pytest.raises(imr.ValidationErrors) as exc:
+        imr.parse_csv(b"IMR_Field_A\n" + body, "f.csv")
+    issues = exc.value.issues
+    assert codes(issues) == ["V08"] * 21
+    assert "row 2 (point 1)" in issues[0].message
+    assert "row 21 (point 20)" in issues[19].message
+    assert issues[20].message == "… and 5 more cells that are not numbers."
+
+
+def test_v09_two_data_rows_rejected():
+    with pytest.raises(imr.ValidationErrors) as exc:
+        imr.parse_csv(b"IMR_Field_A\n1\n2\n", "f.csv")
+    issues = exc.value.issues
+    assert codes(issues) == ["V09"]
+    assert issues[0].severity == "F"
+    assert issues[0].message == (
+        f"Only 2 data rows found; at least {imr.MIN_DATA_ROWS} are needed. "
+        "Add more rows — 20 or more gives reliable limits."
+    )
+
+
+def test_exactly_three_data_rows_accepted():
+    parsed = imr.parse_csv(b"IMR_Field_A\n1\n2\n3\n", "f.csv")
+    assert parsed.n_rows == 3
+    assert parsed.columns[0].values == [1.0, 2.0, 3.0]
+
+
+def test_v05_and_v09_reported_together():
+    with pytest.raises(imr.ValidationErrors) as exc:
+        imr.parse_csv(b"Label\nx\n", "f.csv")
+    assert codes(exc.value.issues) == ["V05", "V09"]
+    assert "Only 1 data rows found" in exc.value.issues[1].message
+
+
+def test_v02_propagates_from_parse_csv_unchanged():
+    with pytest.raises(imr.ValidationErrors) as exc:
+        imr.parse_csv(b"IMR_Field_A\n1\n2\n3\n", "data.txt")
+    issues = exc.value.issues
+    assert codes(issues) == ["V02"]
+    assert issues[0].severity == "F"

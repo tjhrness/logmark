@@ -280,6 +280,78 @@ def read_table(
     return header, data_rows, issues
 
 
+NUMBER_RE = re.compile(r"^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$")
+
+
+def parse_number(text: str) -> float | None:
+    """A plain number, or None (SPEC.md §3.3).
+
+    The regex keeps out blanks, thousands separators, currency and percent signs,
+    text, and "nan"/"inf"/"infinity" in any casing, which float() would accept.
+    """
+    text = text.strip()
+    if NUMBER_RE.match(text):
+        return float(text)
+    return None
+
+
+def parse_csv(data: bytes, filename: str) -> ParsedFile:
+    """Parse and validate an upload; the one entry point the rest of the tool calls.
+
+    V02-V04 propagate from read_table. V05-V09 are collected and raised together.
+    """
+    header, data_rows, issues = read_table(data, filename)
+
+    imr_positions = [
+        position for position, name in enumerate(header)
+        if name.startswith(IMR_PREFIX)
+    ]
+    bad_cells: list[tuple[str, int, str]] = []
+    columns: list[ParsedColumn] = []
+    for index, position in enumerate(imr_positions):
+        name = header[position]
+        values: list[float] = []
+        for row_number, row in enumerate(data_rows, start=2):
+            if len(row) != len(header):
+                continue  # ragged rows are already V07
+            value = parse_number(row[position])
+            if value is None:
+                bad_cells.append((name, row_number, row[position]))
+            else:
+                values.append(value)
+        columns.append(ParsedColumn(name, index, values))
+
+    for name, row_number, text in bad_cells[:MAX_BAD_CELLS_LISTED]:
+        issues.append(_fatal(
+            "V08",
+            f'Column {name}, row {row_number} (point {row_number - 1}) '
+            f'contains "{text}", which is not a number. '
+            f"Every cell in an {IMR_PREFIX} column must be a plain number.",
+        ))
+    if len(bad_cells) > MAX_BAD_CELLS_LISTED:
+        issues.append(_fatal(
+            "V08",
+            f"… and {len(bad_cells) - MAX_BAD_CELLS_LISTED} more cells "
+            "that are not numbers.",
+        ))
+
+    if len(data_rows) < MIN_DATA_ROWS:
+        issues.append(_fatal(
+            "V09",
+            f"Only {len(data_rows)} data rows found; at least {MIN_DATA_ROWS} "
+            "are needed. Add more rows — 20 or more gives reliable limits.",
+        ))
+
+    if issues:
+        raise ValidationErrors(issues)
+    return ParsedFile(
+        source_filename=filename,
+        stem=stem_of(filename),
+        n_rows=len(data_rows),
+        columns=columns,
+    )
+
+
 # ===== SECTION 4: STATISTICS =====
 
 def mean_of(values: list[float]) -> float:
