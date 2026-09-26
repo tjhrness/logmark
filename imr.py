@@ -877,6 +877,104 @@ def build_observations_csv(columns: list[ColumnResult]) -> str:
     return buf.getvalue()
 
 
+BELOW_ZERO_SUFFIX = " (below 0, not drawn)"
+SCROLL_STYLE = "overflow-x: auto"
+
+REPORT_CSS = """
+body { font-family: sans-serif; margin: 16px; }
+section { margin-bottom: 32px; }
+.rejected { border: 2px solid #b00020; background: #fdecea; color: #7a0014; padding: 8px 12px; }
+.warning { border: 2px solid #b36b00; background: #fff4e0; color: #5c3700; padding: 8px 12px; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; margin: 8px 0; }
+th, td { border: 1px solid #888; padding: 2px 8px; text-align: left; }
+td.num { text-align: right; }
+""".strip()
+
+
+def warning_text(n: int) -> str:
+    """The small-sample warning shown above a column's I chart (SPEC.md §6.5)."""
+    return (f"Only {n} points. Control limits based on fewer than {WARN_BELOW_POINTS} points "
+            "are unreliable; treat every pattern below as indicative.")
+
+
+def _row(label: str, value: str) -> str:
+    return f'<tr><th>{html.escape(label)}</th><td class="num">{html.escape(value)}</td></tr>'
+
+
+def build_summary_table_html(chart: ChartResult) -> str:
+    """The eleven-row summary table for one chart (SPEC.md §6.3)."""
+    s = chart.stats
+    if chart.kind == "I":
+        sigma_label = f"Sigma (MR-bar / {D2_CONSTANT})"
+    else:
+        sigma_label = f"Sigma ({MR_SIGMA_FACTOR} x MR-bar)"
+    below = set(lines_below_zero(s)) if chart.kind == "MR" else set()
+    rows = [
+        _row("Points", str(s.n)),
+        _row("Mean", fmt(s.mean)),
+        _row("Average moving range (MR-bar)", fmt(s.mr_bar)),
+        _row(sigma_label, fmt(s.sigma)),
+    ]
+    for k in (3, 2, 1, -1, -2, -3):
+        value = fmt(s.lines[k]) + (BELOW_ZERO_SUFFIX if k in below else "")
+        rows.append(_row(line_name(k), value))
+    rows.append(_row("Patterns detected", str(len(chart.observations))))
+    return "<table>\n" + "\n".join(rows) + "\n</table>"
+
+
+def build_observations_html(chart: ChartResult) -> str:
+    """The observations block for one chart (SPEC.md §6.4)."""
+    heading = f"<h3>Nelson patterns detected ({chart.kind} chart)</h3>"
+    if not chart.observations:
+        return heading + "\n<p>No Nelson patterns detected.</p>"
+    items = "\n".join(f"<li>{html.escape(o.description)}</li>" for o in chart.observations)
+    return heading + "\n<ul>\n" + items + "\n</ul>"
+
+
+def _chart_block_html(column: ColumnResult, chart: ChartResult, include_downloads: bool) -> str:
+    data = base64.b64encode(chart.png).decode("ascii")
+    alt = html.escape(f"{column.name} {chart.kind} chart")
+    parts = [f'<div class="scroll" style="{SCROLL_STYLE}">'
+             f'<img src="data:image/png;base64,{data}" alt="{alt}"></div>']
+    if include_downloads:
+        parts.append(f'<p><a href="/download/png/{column.index}/{chart.kind}">Download PNG</a></p>')
+    parts.append(build_summary_table_html(chart))
+    parts.append(build_observations_html(chart))
+    return "\n".join(parts)
+
+
+def build_column_section_html(column: ColumnResult, include_downloads: bool = False) -> str:
+    """One column's section, used by the results page and the report (SPEC.md §6.1, §7.3)."""
+    parts = ["<section>", f"<h2>{html.escape(column.name)}</h2>"]
+    if column.rejected_reason is not None:
+        parts.append(f'<div class="rejected">{html.escape(column.rejected_reason)}</div>')
+    else:
+        if column.warning:
+            parts.append(f'<div class="warning">{html.escape(column.warning)}</div>')
+        parts.append(_chart_block_html(column, column.individuals, include_downloads))
+        parts.append(_chart_block_html(column, column.moving_range, include_downloads))
+    parts.append("</section>")
+    return "\n".join(parts)
+
+
+def build_report_html(source_filename: str, analysed_at_text: str, columns: list[ColumnResult]) -> str:
+    """The standalone downloadable report (SPEC.md §6.6): inline CSS, embedded PNGs,
+    no form, no download links, no scripts and no external assets."""
+    name = html.escape(source_filename)
+    when = html.escape(analysed_at_text)
+    sections = "\n".join(build_column_section_html(col, include_downloads=False) for col in columns)
+    return (
+        "<!DOCTYPE html>\n"
+        '<html lang="en">\n<head>\n<meta charset="utf-8">\n'
+        f"<title>IMR report — {name} — {when}</title>\n"
+        f"<style>\n{REPORT_CSS}\n</style>\n"
+        "</head>\n<body>\n"
+        f"<h1>IMR report — {name} — {when}</h1>\n"
+        f"{sections}\n"
+        "</body>\n</html>\n"
+    )
+
 
 # ===== SECTION 8: FLASK APP AND ROUTES =====
 
