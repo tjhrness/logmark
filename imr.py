@@ -750,6 +750,99 @@ def pattern_points(observations: list[Observation]) -> set[int]:
 # ===== SECTION 6: RENDERING =====
 
 
+Y_MARGIN_FRACTION = 0.08
+Y_TOP_MARGIN_FRACTION = 0.14  # extra headroom for the number label above the highest point
+FLAT_Y_MARGIN = 1.0
+
+
+def figure_width_inches(n_points_on_i_chart: int) -> float:
+    """Chart width in inches: max(FIG_MIN_WIDTH_IN, FIG_WIDTH_PER_POINT_IN x N) (SPEC.md §6.2)."""
+    return max(FIG_MIN_WIDTH_IN, FIG_WIDTH_PER_POINT_IN * n_points_on_i_chart)
+
+
+def x_ticks(n_total: int) -> list[int]:
+    """Every point number up to TICK_EVERY_POINT_UP_TO, otherwise 1, 5, 10, 15 ..."""
+    if n_total <= TICK_EVERY_POINT_UP_TO:
+        return list(range(1, n_total + 1))
+    return [1] + list(range(5, n_total + 1, 5))
+
+
+def _line_style(k: int) -> tuple[str, str]:
+    """(colour, linestyle): mean black dotted, +/-1 and +/-2 SD red dotted, +/-3 SD red solid."""
+    if k == 0:
+        return "black", ":"
+    if abs(k) == 3:
+        return "red", "-"
+    return "red", ":"
+
+
+def render_chart(series: Series, stats: ChartStats, pattern_pts: set[int], title: str,
+                 y_label: str, n_total: int, hide_ks: list[int] | None = None) -> bytes:
+    """Draw one I or MR chart as PNG bytes (SPEC.md §6.2, §10).
+
+    n_total is N, the number of points on the I chart, used for both charts so they
+    align when stacked. Lines whose k is in hide_ks are not drawn (MR lines below 0).
+    """
+    hidden = set(hide_ks or [])
+    x_min, x_max = 0.5, n_total + 0.5
+    fig, ax = plt.subplots(figsize=(figure_width_inches(n_total), FIG_HEIGHT_IN), dpi=FIG_DPI)
+    try:
+        drawn = [k for k in LINE_KS if k not in hidden]
+        for k in drawn:
+            colour, style = _line_style(k)
+            y = stats.lines[k]
+            ax.hlines(y, x_min, x_max, colors=colour, linestyles=style, linewidth=1, zorder=1)
+            ax.text(x_max, y, " " + line_name(k), ha="left", va="center", fontsize=7,
+                    clip_on=False)
+
+        xs, ys = series.point_numbers, series.values
+        ax.plot(xs, ys, color="black", linestyle="-", linewidth=0.8, zorder=2)
+
+        normal = [(p, v) for p, v in zip(xs, ys) if p not in pattern_pts]
+        flagged = [(p, v) for p, v in zip(xs, ys) if p in pattern_pts]
+        if normal:
+            ax.plot([p for p, _ in normal], [v for _, v in normal], linestyle="None",
+                    marker="o", markersize=6, color="black", zorder=3)
+        if flagged:
+            ax.plot([p for p, _ in flagged], [v for _, v in flagged], linestyle="None",
+                    marker="^", markersize=8, color="red", zorder=4)
+
+        for p, v in zip(xs, ys):
+            ax.annotate(str(p), (p, v), textcoords="offset points", xytext=(0, 5),
+                        ha="center", fontsize=7, zorder=5)
+
+        ax.set_xlim(x_min, x_max)
+        ax.set_xticks(x_ticks(n_total))
+        ax.set_xlabel("Point number")
+        ax.set_ylabel(y_label)
+
+        y_values = list(ys) + [stats.lines[k] for k in drawn]
+        low, high = min(y_values), max(y_values)
+        span = high - low
+        margin = span * Y_MARGIN_FRACTION if span > 0 else FLAT_Y_MARGIN
+        top_margin = span * Y_TOP_MARGIN_FRACTION if span > 0 else FLAT_Y_MARGIN
+        bottom = 0.0 if hidden else low - margin
+        ax.set_ylim(bottom, high + top_margin)
+
+        ax.legend(
+            handles=[
+                matplotlib.lines.Line2D([], [], linestyle="None", marker="o", markersize=6, color="black",
+                       label="Data point"),
+                matplotlib.lines.Line2D([], [], linestyle="None", marker="^", markersize=8, color="red",
+                       label="Nelson pattern point"),
+            ],
+            loc="upper left", fontsize=7,
+        )
+        ax.set_title(title)
+        fig.subplots_adjust(right=0.92)
+
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", bbox_inches="tight", metadata={"Software": None})
+        return buf.getvalue()
+    finally:
+        plt.close(fig)
+
+
 # ===== SECTION 7: REPORT AND CSV BUILDERS =====
 
 
