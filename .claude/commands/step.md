@@ -10,4 +10,6 @@ Run build step $ARGUMENTS of the IMR Control Chart Tool, and only that step.
 3. If there is no such heading, or no ```text block under it, stop and say so. Do not guess a prompt.
 4. Follow CLAUDE.md throughout. Never modify SPEC.md, BLUEPRINT.md, todo.md or CLAUDE.md.
 5. Commit exactly as the step prompt says (Step 21 is not committed by you). If the repository has a remote named `origin`, push each commit you make to the current branch with `git push -u origin HEAD`, since a cloud container does not keep unpushed work.
-6. Finish with the plain-English summary the step prompt asks for.
+6. Owner-approved exception to the "never modify todo.md" rule, limited to this: once the full test suite is green, open todo.md, find the `**Step $ARGUMENTS — ` entry and tick only its `Built` line (for Step 21, `Built; files staged, **not committed**`) and its `Tests green` line, changing `- [ ]` to `- [x]`. Change nothing else in todo.md: the Verify and Watch-for items are the owner's to tick. Except on Step 21, commit this as a separate commit after the step's own commit (message: `todo: tick Step $ARGUMENTS built and tests green`) and push it as in point 5. On Step 21, leave the change unstaged and uncommitted along with the rest.
+7. Show the owner the updated todo.md: send it with the SendUserFile tool (display "render") if that tool is available, otherwise print that step's todo.md entry in your reply.
+8. Finish with the plain-English summary the step prompt asks for.

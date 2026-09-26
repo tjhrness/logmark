@@ -22,23 +22,23 @@ If 2–4 fail, fix it before the next step. Debt compounds across 22 steps.
 - [x] **Spec defaults (Appendix A)** — no changes from you; v1.1 stands on them
 - [x] **Sigma method** — D1 and D2 reversed: sigma comes from the average moving range (÷ 1.128 on the I chart; 0.7557 × on the MR chart). Recorded in SPEC.md v1.1 Appendix B
 - [x] **D3 kept** — all eight rules on the MR chart; rationale recorded in Appendix B ("see every signal, judge it myself; MR Rules 2–8 are worth a look, not act on it")
-- [ ] **One default whose reason changed:** minimum rows stays at **3**. v1.0's reason (the plain-SD MR chart needed 2 moving ranges) is gone; the new reason is that a 1-point MR chart can show nothing. Your interview answer was 2 — say so before Step 1 if you want it back (one constant)
-- [ ] **Blueprint decisions BD1–BD21** (BLUEPRINT.md §1.6) — a two-minute veto pass. The ones most worth a look:
-  - [ ] BD1: plain hyphen for minus signs everywhere (`-1 SD`, `-3.200`), so Excel and the tests never trip on a typographic minus
-  - [ ] BD4: a blank line *between* rows rejects the file; blank lines at the *end* are ignored
-  - [ ] BD18: a failed upload wipes the previous results off the screen
-  - [ ] BD6: timestamps in local time, `YYYY-MM-DD HH:MM:SS`
+- [x] **One default whose reason changed:** minimum rows stays at **3**. v1.0's reason (the plain-SD MR chart needed 2 moving ranges) is gone; the new reason is that a 1-point MR chart can show nothing. Your interview answer was 2 — say so before Step 1 if you want it back (one constant) — **kept at 3** (owner, 26 Sep 2026)
+- [x] **Blueprint decisions BD1–BD21** (BLUEPRINT.md §1.6) — a two-minute veto pass. The ones most worth a look: — **no vetoes** (owner, 26 Sep 2026)
+  - [x] BD1: plain hyphen for minus signs everywhere (`-1 SD`, `-3.200`), so Excel and the tests never trip on a typographic minus
+  - [x] BD4: a blank line *between* rows rejects the file; blank lines at the *end* are ignored
+  - [x] BD18: a failed upload wipes the previous results off the screen
+  - [x] BD6: timestamps in local time, `YYYY-MM-DD HH:MM:SS`
 
 ### 0.2 Environment
 
-- [ ] Python 3.11 installed (`python --version` in a terminal shows 3.11.x)
-- [ ] VS Code with the Claude Code extension working
-- [ ] New folder `imr-chart-tool`, opened in VS Code
-- [ ] Virtual environment created and activated in that folder (`python -m venv .venv`, then `.venv\Scripts\activate`) — the terminal prompt shows `(.venv)`
-- [ ] `SPEC.md` (**v1.1** — the file delivered with this checklist, not the v1.0 PDF/Markdown), `BLUEPRINT.md`, `todo.md` and `CLAUDE.md` copied into the folder root
-- [ ] `git init`, then a first commit containing those four files, **before Step 1**
-- [ ] A `.gitignore` with `.venv/`, `__pycache__/`, `.pytest_cache/` (ask Claude Code for it in a throwaway session, or type it yourself)
-- [ ] Your `/step` command from the Pareto build works here too (it reads `### Step N — Title` + one ```` ```text ```` block from BLUEPRINT.md). If not, paste prompts by hand
+- [x] Python 3.11 installed (`python --version` in a terminal shows 3.11.x) — 3.11.15 in the Claude Code cloud container
+- [x] VS Code with the Claude Code extension working — *n/a: building in a Claude Code cloud session on repo `tjhrness/logmark`*
+- [x] New folder `imr-chart-tool`, opened in VS Code — *n/a: building in a Claude Code cloud session on repo `tjhrness/logmark`*
+- [x] Virtual environment created and activated in that folder (`python -m venv .venv`, then `.venv\Scripts\activate`) — the terminal prompt shows `(.venv)` — *n/a: building in a Claude Code cloud session on repo `tjhrness/logmark`*
+- [x] `SPEC.md` (**v1.1** — the file delivered with this checklist, not the v1.0 PDF/Markdown), `BLUEPRINT.md`, `todo.md` and `CLAUDE.md` copied into the folder root — done, commit `9511686`
+- [x] `git init`, then a first commit containing those four files, **before Step 1** — done, commit `9511686`, pushed to `claude/bold-curie-bev803`
+- [x] A `.gitignore` with `.venv/`, `__pycache__/`, `.pytest_cache/` (ask Claude Code for it in a throwaway session, or type it yourself) — done
+- [x] Your `/step` command from the Pareto build works here too (it reads `### Step N — Title` + one ```` ```text ```` block from BLUEPRINT.md). If not, paste prompts by hand — added as `.claude/commands/step.md`
 - [ ] Empty build-log file created (outside the coding tool)
 - [ ] Excel to hand — you need it at Step 21 and at the end
 
