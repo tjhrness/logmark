@@ -279,3 +279,102 @@ def test_rule_2_uses_point_numbers_mr_numbering():
     assert obs[0].points == list(range(2, 11))
     assert obs[0].span == (2, 10)
     assert "points 2–10." in obs[0].description
+
+
+# ===== Rules 7 and 8 (SPEC.md §5.3) =====
+
+def _alternate(a, b, n):
+    return [a if i % 2 == 0 else b for i in range(n)]
+
+
+def test_rule_7_fifteen_within():
+    vals = _alternate(0.5, -0.5, 15)
+    obs = imr.rule_7(_series(vals), L)
+    assert len(obs) == 1
+    o = obs[0]
+    assert o.rule_no == 7
+    assert o.rule_name == imr.RULE_NAMES[7]
+    assert o.direction == "within"
+    assert o.points == list(range(1, 16))
+    assert o.values == vals
+    assert o.span == (1, 15)
+    assert o.line_or_window == "-1 SD=-1.000; +1 SD=1.000"
+    pairs = ", ".join(f"{p}={'0.500' if p % 2 else '-0.500'}" for p in range(1, 16))
+    assert o.description == (
+        "Rule 7 — Fifteen or more points within 1 SD of the mean: 15 consecutive "
+        "points, 1–15, all between the -1 SD line (-1.000) and the +1 SD line "
+        f"(1.000). Values: {pairs}."
+    )
+
+
+def test_rule_7_fourteen_nothing():
+    assert imr.rule_7(_series(_alternate(0.5, -0.5, 14)), L) == []
+
+
+def test_rule_7_eighteen_one_entry():
+    obs = imr.rule_7(_series(_alternate(0.5, -0.5, 18)), L)
+    assert len(obs) == 1
+    assert obs[0].points == list(range(1, 19))
+    assert obs[0].span == (1, 18)
+
+
+def test_rule_7_e14_point_on_plus_one_splits_run():
+    assert imr.rule_7(_series([0.5] * 7 + [1.0] + [0.5] * 7), L) == []
+
+
+def test_rule_7_uses_point_numbers_mr_numbering():
+    obs = imr.rule_7(_series(_alternate(0.5, -0.5, 15), list(range(2, 17))), L)
+    assert len(obs) == 1
+    assert obs[0].points == list(range(2, 17))
+    assert obs[0].span == (2, 16)
+    assert "points, 2–16, all between" in obs[0].description
+
+
+def test_rule_8_e8():
+    vals = _alternate(1.5, -1.5, 8)
+    obs = imr.rule_8(_series(vals), L)
+    assert len(obs) == 1
+    o = obs[0]
+    assert o.rule_no == 8
+    assert o.rule_name == imr.RULE_NAMES[8]
+    assert o.direction == "either"
+    assert o.points == list(range(1, 9))
+    assert o.values == vals
+    assert o.span == (1, 8)
+    assert o.line_or_window == "-1 SD=-1.000; +1 SD=1.000"
+    assert "(4 above, 4 below)" in o.description
+    assert o.description == (
+        "Rule 8 — Eight or more points beyond 1 SD on either side: 8 consecutive "
+        "points, 1–8, none within 1 SD (4 above, 4 below). Values: 1=1.500, "
+        "2=-1.500, 3=1.500, 4=-1.500, 5=1.500, 6=-1.500, 7=1.500, 8=-1.500."
+    )
+
+
+def test_rule_8_seven_nothing():
+    assert imr.rule_8(_series(_alternate(1.5, -1.5, 7)), L) == []
+
+
+def test_rule_8_eleven_one_entry_with_counts():
+    obs = imr.rule_8(_series(_alternate(1.5, -1.5, 11)), L)
+    assert len(obs) == 1
+    assert obs[0].points == list(range(1, 12))
+    assert obs[0].span == (1, 11)
+    assert "(6 above, 5 below)" in obs[0].description
+
+
+def test_rule_8_e9_values_on_lines_nothing():
+    assert imr.rule_8(_series(_alternate(1.0, -1.0, 14)), L) == []
+
+
+def test_rule_8_all_one_side():
+    obs = imr.rule_8(_series([1.5] * 8), L)
+    assert len(obs) == 1
+    assert "(8 above, 0 below)" in obs[0].description
+
+
+def test_rule_8_uses_point_numbers_mr_numbering():
+    obs = imr.rule_8(_series(_alternate(1.5, -1.5, 8), list(range(2, 10))), L)
+    assert len(obs) == 1
+    assert obs[0].points == list(range(2, 10))
+    assert obs[0].span == (2, 9)
+    assert "points, 2–9, none within" in obs[0].description

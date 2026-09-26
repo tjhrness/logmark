@@ -382,6 +382,60 @@ def rule_2(series: Series, lines: dict[int, float],
     return out
 
 
+def _one_sd_band(lines: dict[int, float]) -> str:
+    """line_or_window text shared by Rules 7 and 8."""
+    return f"-1 SD={fmt(lines[-1])}; +1 SD={fmt(lines[1])}"
+
+
+def rule_7(series: Series, lines: dict[int, float],
+           field: str = "", chart: str = "") -> list[Observation]:
+    """Fifteen or more points within 1 SD of the mean. One observation per maximal run."""
+    labels = [True if within_1(v, lines) else None for v in series.values]
+    out = []
+    for _, s, e in maximal_runs(labels):
+        if e - s + 1 < RULE_7_MIN_RUN:
+            continue
+        points = series.point_numbers[s:e + 1]
+        values = series.values[s:e + 1]
+        out.append(Observation(
+            field=field, chart=chart, rule_no=7, rule_name=RULE_NAMES[7],
+            direction="within", points=points, values=values,
+            span=(points[0], points[-1]),
+            line_or_window=_one_sd_band(lines),
+            description=(f"Rule 7 — {RULE_NAMES[7]}: {len(points)} consecutive "
+                         f"points, {fmt_span(points[0], points[-1])}, all between "
+                         f"the -1 SD line ({fmt(lines[-1])}) and the +1 SD line "
+                         f"({fmt(lines[1])}). Values: {fmt_pairs(points, values)}."),
+        ))
+    return out
+
+
+def rule_8(series: Series, lines: dict[int, float],
+           field: str = "", chart: str = "") -> list[Observation]:
+    """Eight or more points beyond 1 SD, either side. One observation per maximal run."""
+    labels = [True if outside_1(v, lines) else None for v in series.values]
+    out = []
+    for _, s, e in maximal_runs(labels):
+        if e - s + 1 < RULE_8_MIN_RUN:
+            continue
+        points = series.point_numbers[s:e + 1]
+        values = series.values[s:e + 1]
+        n_above = sum(1 for v in values if beyond_above(v, lines, 1))
+        n_below = sum(1 for v in values if beyond_below(v, lines, 1))
+        out.append(Observation(
+            field=field, chart=chart, rule_no=8, rule_name=RULE_NAMES[8],
+            direction="either", points=points, values=values,
+            span=(points[0], points[-1]),
+            line_or_window=_one_sd_band(lines),
+            description=(f"Rule 8 — Eight or more points beyond 1 SD on either side: "
+                         f"{len(points)} consecutive points, "
+                         f"{fmt_span(points[0], points[-1])}, none within 1 SD "
+                         f"({n_above} above, {n_below} below). "
+                         f"Values: {fmt_pairs(points, values)}."),
+        ))
+    return out
+
+
 
 # ===== SECTION 6: RENDERING =====
 
