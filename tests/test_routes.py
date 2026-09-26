@@ -1,6 +1,7 @@
 """Route tests (SPEC.md §2.2, §6.1, §7.1 V01, §7.3, §7.4, §9.3): the upload page and
 POST /analyze, driven through Flask's test client."""
 
+import csv
 import io
 
 import pytest
@@ -200,6 +201,122 @@ def test_filename_is_escaped(client):
     assert "&lt;b&gt;odd&lt;/b&gt;" in body
 
 
-def test_no_download_links_yet(client):
+# ----- Downloads (SPEC.md §6.6, §7.3, §9.3) -----
+
+NOTHING_YET = "Nothing has been analysed yet. Upload a file first."
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+OBSERVATIONS_HEADER = ["field", "chart", "rule_no", "rule_name", "direction", "points",
+                       "values", "line_or_window", "description"]
+ALL_DOWNLOADS = ["/download/report", "/download/observations",
+                 "/download/png/0/I", "/download/png/0/MR"]
+MY_DATA_CSV = make_csv("IMR_Field_A", "IMR_Field (B)")
+
+
+def with_flat_column_csv() -> bytes:
+    rows = ["IMR_Field_A,IMR_Field (B),IMR_Field_Flat"]
+    for a, b in zip(A_VALUES, B_VALUES):
+        rows.append(f"{a},{b},7.5")
+    return ("\n".join(rows) + "\n").encode("utf-8")
+
+
+def attachment_name(response) -> str:
+    disposition = response.headers["Content-Disposition"]
+    assert disposition.startswith("attachment")
+    return disposition.split("filename=", 1)[1].strip('"')
+
+
+@pytest.mark.parametrize("path", ALL_DOWNLOADS)
+def test_download_before_any_upload_is_404(client, path):
+    response = client.get(path)
+    assert response.status_code == 404
+    assert page(response) == NOTHING_YET
+
+
+def test_download_report(client):
+    upload(client, MY_DATA_CSV, "My Data.csv")
+    response = client.get("/download/report")
+    assert response.status_code == 200
+    assert response.mimetype == "text/html"
+    assert attachment_name(response) == "My_Data_IMR_report.html"
+    body = page(response)
+    assert body == imr.LAST_RESULT.report_html
+    assert "<form" not in body
+
+
+def test_download_observations(client):
+    upload(client, MY_DATA_CSV, "My Data.csv")
+    response = client.get("/download/observations")
+    assert response.status_code == 200
+    assert response.mimetype == "text/csv"
+    assert attachment_name(response) == "My_Data_observations.csv"
+    text = response.get_data().decode("utf-8")
+    assert text == imr.LAST_RESULT.observations_csv
+    rows = list(csv.reader(io.StringIO(text)))
+    assert rows[0] == OBSERVATIONS_HEADER
+
+
+@pytest.mark.parametrize("chart", ["I", "MR"])
+def test_download_png(client, chart):
+    upload(client, MY_DATA_CSV, "My Data.csv")
+    response = client.get(f"/download/png/0/{chart}")
+    assert response.status_code == 200
+    assert response.mimetype == "image/png"
+    assert attachment_name(response) == f"My_Data_IMR_Field_A_{chart}.png"
+    data = response.get_data()
+    assert data.startswith(PNG_SIGNATURE)
+    column = imr.LAST_RESULT.columns[0]
+    stored = column.individuals if chart == "I" else column.moving_range
+    assert data == stored.png
+
+
+def test_download_png_second_column_name_is_sanitised(client):
+    upload(client, MY_DATA_CSV, "My Data.csv")
+    response = client.get("/download/png/1/I")
+    assert response.status_code == 200
+    assert attachment_name(response) == "My_Data_IMR_Field__B__I.png"
+    assert response.get_data() == imr.LAST_RESULT.columns[1].individuals.png
+
+
+@pytest.mark.parametrize("path", ["/download/png/0/X", "/download/png/9/I"])
+def test_download_png_unknown_chart_or_index_is_404(client, path):
+    upload(client, MY_DATA_CSV, "My Data.csv")
+    response = client.get(path)
+    assert response.status_code == 404
+    assert page(response).strip() != ""
+    assert "Traceback" not in page(response)
+
+
+def test_download_png_rejected_column_is_404(client):
+    upload(client, with_flat_column_csv(), "My Data.csv")
+    assert imr.LAST_RESULT.columns[2].rejected_reason is not None
+    for chart in ("I", "MR"):
+        response = client.get(f"/download/png/2/{chart}")
+        assert response.status_code == 404
+        assert page(response).strip() != ""
+
+
+def test_results_page_has_download_links(client):
+    body = page(upload(client, with_flat_column_csv(), "My Data.csv"))
+    assert body.count('href="/download/report"') == 1
+    assert body.count('href="/download/observations"') == 1
+    assert "Download report (HTML)" in body
+    assert "Download observations (CSV)" in body
+    for i in (0, 1):
+        for chart in ("I", "MR"):
+            assert body.count(f'href="/download/png/{i}/{chart}"') == 1
+    assert "/download/png/2/" not in body
+    assert body == page(client.get("/"))
+
+
+def test_page_without_results_has_no_download_links(client):
     assert "/download/" not in page(client.get("/"))
-    assert "/download/" not in page(upload(client, GOOD_CSV, "weights.csv"))
+
+
+def test_downloads_are_404_after_failed_upload(client):
+    upload(client, MY_DATA_CSV, "My Data.csv")
+    assert client.get("/download/report").status_code == 200
+    upload(client, MY_DATA_CSV, "My Data.txt")
+    for path in ALL_DOWNLOADS:
+        response = client.get(path)
+        assert response.status_code == 404
+        assert page(response) == NOTHING_YET

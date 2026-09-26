@@ -1051,6 +1051,7 @@ from flask import Flask, request, Response
 LAST_RESULT: AnalysisResult | None = None
 
 NO_FILE_MESSAGE = "No file was selected. Choose a .csv file and click Analyze."
+NOTHING_ANALYSED_MESSAGE = "Nothing has been analysed yet. Upload a file first."
 
 PAGE_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
@@ -1105,8 +1106,10 @@ def render_page(errors: list[str] | None = None, result: AnalysisResult | None =
     results_html = ""
     if result is not None:
         header = (f"<h2>Results for {html.escape(result.source_filename)}</h2>\n"
-                  f"<p>Analysed at {html.escape(timestamp_text(result.analysed_at))}</p>")
-        sections = "\n".join(build_column_section_html(column, include_downloads=False)
+                  f"<p>Analysed at {html.escape(timestamp_text(result.analysed_at))}</p>\n"
+                  '<p><a href="/download/report">Download report (HTML)</a> | '
+                  '<a href="/download/observations">Download observations (CSV)</a></p>')
+        sections = "\n".join(build_column_section_html(column, include_downloads=True)
                              for column in result.columns)
         results_html = f'<div class="results">\n{header}\n{sections}\n</div>'
     return (PAGE_TEMPLATE
@@ -1119,8 +1122,19 @@ def html_response(body: str, status: int) -> Response:
     return Response(body, status=status, mimetype="text/html")
 
 
+def text_response(message: str, status: int) -> Response:
+    return Response(message, status=status, mimetype="text/plain")
+
+
+def attachment(body: str | bytes, content_type: str, filename: str) -> Response:
+    """A download served from memory; nothing is written to disk (SPEC.md §6.6)."""
+    response = Response(body, status=200, content_type=content_type)
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
 def create_app() -> Flask:
-    """Build the Flask app with the upload page and the analyse action (SPEC.md §9.3)."""
+    """Build the Flask app: upload page, analyse action and the three downloads (SPEC.md §9.3)."""
     app = Flask(__name__)
     app.debug = False
 
@@ -1149,6 +1163,41 @@ def create_app() -> Flask:
             return unexpected_error(filename)
         LAST_RESULT = result
         return html_response(render_page(result=result), 200)
+
+    @app.get("/download/report")
+    def download_report() -> Response:
+        result = LAST_RESULT
+        if result is None:
+            return text_response(NOTHING_ANALYSED_MESSAGE, 404)
+        return attachment(result.report_html, "text/html; charset=utf-8",
+                          f"{result.stem}_IMR_report.html")
+
+    @app.get("/download/observations")
+    def download_observations() -> Response:
+        result = LAST_RESULT
+        if result is None:
+            return text_response(NOTHING_ANALYSED_MESSAGE, 404)
+        return attachment(result.observations_csv.encode("utf-8"), "text/csv; charset=utf-8",
+                          f"{result.stem}_observations.csv")
+
+    @app.get("/download/png/<int:column_index>/<chart>")
+    def download_png(column_index: int, chart: str) -> Response:
+        result = LAST_RESULT
+        if result is None:
+            return text_response(NOTHING_ANALYSED_MESSAGE, 404)
+        if chart not in ("I", "MR"):
+            return text_response(f"There is no chart called {chart}. "
+                                 "Use the Download PNG links on the results page.", 404)
+        column = next((c for c in result.columns if c.index == column_index), None)
+        if column is None:
+            return text_response(f"There is no column number {column_index} in the last analysis. "
+                                 "Use the Download PNG links on the results page.", 404)
+        chart_result = column.individuals if chart == "I" else column.moving_range
+        if column.rejected_reason is not None or chart_result is None:
+            return text_response(f"{column.name} was not charted, so it has no {chart} chart "
+                                 "to download. See the red box on the results page for why.", 404)
+        return attachment(chart_result.png, "image/png",
+                          f"{result.stem}_{sanitise_name(column.name)}_{chart}.png")
 
     return app
 
