@@ -444,6 +444,62 @@ def rule_4(series: Series, lines: dict[int, float],
     return out
 
 
+def window_observations(series: Series, lines: dict[int, float], k: int,
+                        width: int, min_count: int, rule_no: int,
+                        field: str = "", chart: str = "") -> list[Observation]:
+    """Rules 5 and 6 (SPEC.md §5.4). Each side is scanned on its own: a window of
+    `width` positions qualifies when at least `min_count` of them are beyond the
+    ±k SD line; qualifying windows that share a position merge into one span.
+    Only the flagged points inside a span are listed."""
+    heads = {5: "Two of three points beyond 2 SD", 6: "Four of five points beyond 1 SD"}
+    n = len(series.values)
+    out = []
+    for direction, line_k, beyond in (("above", k, beyond_above),
+                                      ("below", -k, beyond_below)):
+        flags = [beyond(v, lines, k) for v in series.values]
+        spans = []
+        for s in range(n - width + 1):
+            if sum(flags[s:s + width]) < min_count:
+                continue
+            e = s + width - 1
+            if spans and s <= spans[-1][1]:
+                spans[-1][1] = e
+            else:
+                spans.append([s, e])
+        name = line_name(line_k)
+        for s, e in spans:
+            idx = [i for i in range(s, e + 1) if flags[i]]
+            points = [series.point_numbers[i] for i in idx]
+            values = [series.values[i] for i in idx]
+            a, b = series.point_numbers[s], series.point_numbers[e]
+            out.append(Observation(
+                field=field, chart=chart, rule_no=rule_no,
+                rule_name=RULE_NAMES[rule_no], direction=direction,
+                points=points, values=values, span=(a, b),
+                line_or_window=f"{name}={fmt(lines[line_k])}; window {a}-{b}",
+                description=(f"Rule {rule_no} — {heads[rule_no]}: points "
+                             f"{fmt_points(points)} (values {fmt_values(values)}) "
+                             f"are {direction} the {name} line "
+                             f"({fmt(lines[line_k])}); window {fmt_span(a, b)}."),
+            ))
+    out.sort(key=lambda o: o.points[0])
+    return out
+
+
+def rule_5(series: Series, lines: dict[int, float],
+           field: str = "", chart: str = "") -> list[Observation]:
+    """Two of three points beyond 2 SD, same side."""
+    return window_observations(series, lines, 2, RULE_5_WINDOW, RULE_5_MIN_COUNT,
+                               5, field, chart)
+
+
+def rule_6(series: Series, lines: dict[int, float],
+           field: str = "", chart: str = "") -> list[Observation]:
+    """Four of five points beyond 1 SD, same side."""
+    return window_observations(series, lines, 1, RULE_6_WINDOW, RULE_6_MIN_COUNT,
+                               6, field, chart)
+
+
 def _one_sd_band(lines: dict[int, float]) -> str:
     """line_or_window text shared by Rules 7 and 8."""
     return f"-1 SD={fmt(lines[-1])}; +1 SD={fmt(lines[1])}"

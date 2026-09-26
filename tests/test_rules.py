@@ -497,3 +497,104 @@ def test_rule_4_uses_point_numbers_mr_numbering():
     assert obs[0].points == list(range(2, 16))
     assert obs[0].span == (2, 15)
     assert "14 consecutive points, 2–15." in obs[0].description
+
+
+# ----- Rule 5: two of three points beyond 2 SD (window rule, §5.4) -----
+
+def test_rule_5_e10():
+    obs = imr.rule_5(_series([2.5, 0, 2.5]), L)
+    assert len(obs) == 1
+    o = obs[0]
+    assert o.rule_no == 5
+    assert o.rule_name == imr.RULE_NAMES[5]
+    assert o.direction == "above"
+    assert o.points == [1, 3]
+    assert o.values == [2.5, 2.5]
+    assert o.span == (1, 3)
+    assert o.line_or_window == "+2 SD=2.000; window 1-3"
+    assert o.description == (
+        "Rule 5 — Two of three points beyond 2 SD: points 1, 3 "
+        "(values 2.500, 2.500) are above the +2 SD line (2.000); window 1–3.")
+
+
+def test_rule_5_e11_overlapping_windows_merge():
+    obs = imr.rule_5(_series([2.5, 0, 2.5, 2.5, 0, 0]), L)
+    assert len(obs) == 1
+    assert obs[0].points == [1, 3, 4]
+    assert obs[0].span == (1, 5)
+    assert 5 not in obs[0].points
+
+
+def test_rule_5_adjacent_non_overlapping_windows_stay_separate():
+    obs = imr.rule_5(_series([2.5, 2.5, 0, 0, 2.5, 2.5]), L)
+    assert len(obs) == 2
+    assert obs[0].points == [1, 2]
+    assert obs[0].span == (1, 3)
+    assert obs[1].points == [5, 6]
+    assert obs[1].span == (4, 6)
+
+
+def test_rule_5_threshold_minus_one_nothing():
+    assert imr.rule_5(_series([2.5, 0, 0, 2.5]), L) == []
+
+
+def test_rule_5_three_of_three():
+    obs = imr.rule_5(_series([2.5, 2.5, 2.5]), L)
+    assert len(obs) == 1
+    assert obs[0].points == [1, 2, 3]
+
+
+def test_rule_5_below_side():
+    obs = imr.rule_5(_series([-2.5, 0, -2.5]), L)
+    assert len(obs) == 1
+    assert obs[0].direction == "below"
+    assert obs[0].line_or_window == "-2 SD=-2.000; window 1-3"
+
+
+def test_rule_5_opposite_sides_do_not_count_together():
+    assert imr.rule_5(_series([2.5, -2.5, 0]), L) == []
+
+
+def test_rule_5_value_on_line_not_flagged():
+    assert imr.rule_5(_series([2.0, 0, 2.5]), L) == []
+
+
+def test_rule_5_uses_point_numbers_mr_numbering():
+    obs = imr.rule_5(imr.Series(point_numbers=[2, 3, 4], values=[2.5, 0, 2.5]), L)
+    assert len(obs) == 1
+    assert obs[0].points == [2, 4]
+    assert obs[0].span == (2, 4)
+    assert obs[0].line_or_window.endswith("window 2-4")
+    assert obs[0].description.endswith("window 2–4.")
+
+
+# ----- Rule 6: four of five points beyond 1 SD (window rule, §5.4) -----
+
+def test_rule_6_e12():
+    obs = imr.rule_6(_series([1.5, 1.5, 0, 1.5, 1.5]), L)
+    assert len(obs) == 1
+    o = obs[0]
+    assert o.rule_no == 6
+    assert o.rule_name == imr.RULE_NAMES[6]
+    assert o.direction == "above"
+    assert o.points == [1, 2, 4, 5]
+    assert o.span == (1, 5)
+    assert o.line_or_window == "+1 SD=1.000; window 1-5"
+    assert o.description == (
+        "Rule 6 — Four of five points beyond 1 SD: points 1, 2, 4, 5 "
+        "(values 1.500, 1.500, 1.500, 1.500) are above the +1 SD line (1.000); "
+        "window 1–5.")
+
+
+def test_rule_6_three_of_five_nothing():
+    assert imr.rule_6(_series([1.5, 1.5, 0, 1.5, 0]), L) == []
+
+
+def test_rule_6_five_of_five():
+    obs = imr.rule_6(_series([1.5] * 5), L)
+    assert len(obs) == 1
+    assert obs[0].points == [1, 2, 3, 4, 5]
+
+
+def test_rule_6_series_shorter_than_window_nothing():
+    assert imr.rule_6(_series([1.5] * 4), L) == []
