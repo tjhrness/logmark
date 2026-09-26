@@ -74,3 +74,31 @@ def test_charted_values_have_at_most_two_decimals():
     for row in body:
         for i in charted:
             assert TWO_DECIMALS_RE.match(row[i]), (header[i], row[i])
+
+
+# ----- acceptance test: the answer key (SPEC.md §11.4, §12.8) -----
+
+ANSWER_KEY_PATH = SAMPLE_PATH.parent / "sample_answer_key.csv"
+
+CSV_HEADER = ["field", "chart", "rule_no", "rule_name", "direction", "points", "values",
+              "line_or_window", "description"]
+
+
+def read_rows(text):
+    return list(csv.reader(io.StringIO(text)))
+
+
+def test_observations_csv_matches_answer_key_row_for_row(result):
+    key_rows = read_rows(ANSWER_KEY_PATH.read_text(encoding="utf-8"))
+    tool_rows = read_rows(result.observations_csv)
+    assert len(tool_rows) == len(key_rows)
+    for i, (tool_row, key_row) in enumerate(zip(tool_rows, key_rows)):
+        assert tool_row == key_row, f"row {i} differs"
+
+
+def test_answer_key_shape():
+    key_rows = read_rows(ANSWER_KEY_PATH.read_text(encoding="utf-8"))
+    assert key_rows[0] == CSV_HEADER
+    body = key_rows[1:]
+    assert {row[2] for row in body} >= {str(k) for k in range(1, 9)}
+    assert not any(row[0] == "IMR_Field_Clean" for row in body)
