@@ -96,8 +96,8 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 **Step 4 — Zone predicates and difference signs**
 
-- [ ] Built
-- [ ] Tests green
+- [x] Built
+- [x] Tests green
 - [ ] Verify: the summary states that a value exactly on a line counts as neither side
 
 **Step 5 — Rule 1 and observation formatting**
