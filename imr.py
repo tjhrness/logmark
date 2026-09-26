@@ -976,6 +976,72 @@ def build_report_html(source_filename: str, analysed_at_text: str, columns: list
     )
 
 
+# ----- 7.3 Analysis pipeline -----
+
+def timestamp_text(dt: datetime) -> str:
+    """Local time as "YYYY-MM-DD HH:MM:SS"."""
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def analyse_column(column: ParsedColumn) -> ColumnResult:
+    """Charts, statistics and observations for one column (SPEC.md §4, §5, §7.1).
+
+    V10 (severity C): an average moving range of 0 means every value is identical, the
+    only way a sigma can be zero; the column is rejected and both charts are None.
+    W01: fewer than WARN_BELOW_POINTS points adds a warning; processing continues.
+    All eight rules run on both charts with identical thresholds (SPEC.md Appendix B, D3).
+    """
+    name, values = column.name, column.values
+    n = len(values)
+
+    series = individuals_series(values)
+    stats = i_chart_stats(values)
+    if stats.mr_bar == 0:
+        reason = (f"All {n} values in {name} are identical ({fmt(values[0])}), so there is "
+                  "no variation to chart and no limits can be drawn for this column.")
+        return ColumnResult(name=name, index=column.index, n=n, warning=None,
+                            rejected_reason=reason, individuals=None, moving_range=None)
+
+    mr = moving_range_series(values)
+    mr_stats = mr_chart_stats(values)
+
+    warning = warning_text(n) if n < WARN_BELOW_POINTS else None
+
+    i_obs = detect_all(series, stats.lines, field=name, chart="I")
+    mr_obs = detect_all(mr, mr_stats.lines, field=name, chart="MR")
+    i_pts = pattern_points(i_obs)
+    mr_pts = pattern_points(mr_obs)
+
+    i_png = render_chart(series, stats, i_pts, f"{name} — Individuals (I) chart",
+                         "Value", n_total=n)
+    mr_png = render_chart(mr, mr_stats, mr_pts, f"{name} — Moving Range (MR) chart",
+                          "Moving range", n_total=n, hide_ks=lines_below_zero(mr_stats))
+
+    return ColumnResult(
+        name=name, index=column.index, n=n, warning=warning, rejected_reason=None,
+        individuals=ChartResult("I", series.point_numbers, series.values, stats,
+                                i_obs, i_pts, i_png),
+        moving_range=ChartResult("MR", mr.point_numbers, mr.values, mr_stats,
+                                 mr_obs, mr_pts, mr_png),
+    )
+
+
+def analyse(parsed: ParsedFile, analysed_at: datetime | None = None) -> AnalysisResult:
+    """Analyse every column in file order. The report and the observations CSV are
+    built here, once, so a download never recomputes anything (SPEC.md §6.6)."""
+    if analysed_at is None:
+        analysed_at = datetime.now()
+    columns = [analyse_column(col) for col in parsed.columns]
+    return AnalysisResult(
+        source_filename=parsed.source_filename,
+        stem=parsed.stem,
+        analysed_at=analysed_at,
+        columns=columns,
+        report_html=build_report_html(parsed.source_filename, timestamp_text(analysed_at), columns),
+        observations_csv=build_observations_csv(columns),
+    )
+
+
 # ===== SECTION 8: FLASK APP AND ROUTES =====
 
 
