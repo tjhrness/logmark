@@ -293,6 +293,57 @@ def diff_signs(values: list[float]) -> list[str]:
     return [diff_sign(values[i], values[i + 1]) for i in range(len(values) - 1)]
 
 
+# Formatting helpers shared by every rule (SPEC.md §5.5). Numbers go through fmt();
+# signs and line names use the ASCII hyphen-minus, spans in descriptions the en dash.
+
+def line_name(k: int) -> str:
+    """ "Mean" for 0, otherwise "+1 SD" ... "-3 SD"."""
+    if k == 0:
+        return "Mean"
+    return f"{'+' if k > 0 else '-'}{abs(k)} SD"
+
+
+def fmt_pairs(points: list[int], values: list[float]) -> str:
+    """ "14=3.100, 15=2.900"."""
+    return ", ".join(f"{p}={fmt(v)}" for p, v in zip(points, values))
+
+
+def fmt_points(points: list[int]) -> str:
+    return ", ".join(str(p) for p in points)
+
+
+def fmt_values(values: list[float]) -> str:
+    return ", ".join(fmt(v) for v in values)
+
+
+def fmt_span(a: int, b: int) -> str:
+    """Point span for descriptions, with an en dash: "1–12"."""
+    return f"{a}–{b}"
+
+
+# Rules. Each reports point numbers from series.point_numbers, never list positions.
+
+def rule_1(series: Series, lines: dict[int, float],
+           field: str = "", chart: str = "") -> list[Observation]:
+    """One point beyond 3 SD. Every such point is its own observation."""
+    out = []
+    for p, v in zip(series.point_numbers, series.values):
+        for direction, k, beyond in (("above", 3, beyond_above),
+                                     ("below", -3, beyond_below)):
+            if not beyond(v, lines, 3):
+                continue
+            name = line_name(k)
+            out.append(Observation(
+                field=field, chart=chart, rule_no=1, rule_name=RULE_NAMES[1],
+                direction=direction, points=[p], values=[v], span=(p, p),
+                line_or_window=f"{name}={fmt(lines[k])}",
+                description=(f"Rule 1 — {RULE_NAMES[1]}: point {p} "
+                             f"(value {fmt(v)}) is {direction} the {name} line "
+                             f"({fmt(lines[k])})."),
+            ))
+    return out
+
+
 
 # ===== SECTION 6: RENDERING =====
 

@@ -107,3 +107,100 @@ def test_diff_signs_sequence():
 
 def test_diff_signs_single_value_is_empty():
     assert imr.diff_signs([5]) == []
+
+
+# ===== Formatting helpers and Rule 1 (SPEC.md §5.5) =====
+
+def _series(values, point_numbers=None):
+    if point_numbers is None:
+        point_numbers = list(range(1, len(values) + 1))
+    return imr.Series(point_numbers=point_numbers, values=values)
+
+
+def test_line_name_all_seven():
+    assert imr.line_name(0) == "Mean"
+    assert imr.line_name(1) == "+1 SD"
+    assert imr.line_name(2) == "+2 SD"
+    assert imr.line_name(3) == "+3 SD"
+    assert imr.line_name(-1) == "-1 SD"
+    assert imr.line_name(-2) == "-2 SD"
+    assert imr.line_name(-3) == "-3 SD"
+
+
+def test_fmt_pairs():
+    assert imr.fmt_pairs([14, 15], [3.1, 2.9]) == "14=3.100, 15=2.900"
+
+
+def test_fmt_points():
+    assert imr.fmt_points([1, 3, 4]) == "1, 3, 4"
+
+
+def test_fmt_values():
+    assert imr.fmt_values([2.5, 2.5]) == "2.500, 2.500"
+
+
+def test_fmt_span_uses_en_dash():
+    assert imr.fmt_span(1, 12) == "1–12"
+
+
+def test_rule_1_e1():
+    obs = imr.rule_1(_series([0.0, 0.0, 3.5]), L)
+    assert len(obs) == 1
+    o = obs[0]
+    assert o.rule_no == 1
+    assert o.rule_name == imr.RULE_NAMES[1]
+    assert o.direction == "above"
+    assert o.points == [3]
+    assert o.values == [3.5]
+    assert o.span == (3, 3)
+    assert o.line_or_window == "+3 SD=3.000"
+    assert o.description == (
+        "Rule 1 — One point beyond 3 SD: point 3 (value 3.500) "
+        "is above the +3 SD line (3.000)."
+    )
+
+
+def test_rule_1_below():
+    obs = imr.rule_1(_series([-3.5]), L)
+    assert len(obs) == 1
+    o = obs[0]
+    assert o.direction == "below"
+    assert o.line_or_window == "-3 SD=-3.000"
+    assert o.description.endswith("is below the -3 SD line (-3.000).")
+    assert o.description == (
+        "Rule 1 — One point beyond 3 SD: point 1 (value -3.500) "
+        "is below the -3 SD line (-3.000)."
+    )
+
+
+def test_rule_1_exactly_on_line_does_not_fire():
+    assert imr.rule_1(_series([3.0]), L) == []
+    assert imr.rule_1(_series([-3.0]), L) == []
+
+
+def test_rule_1_just_beyond_line_fires():
+    assert len(imr.rule_1(_series([3.0 + 1e-6]), L)) == 1
+
+
+def test_rule_1_consecutive_points_are_separate():
+    obs = imr.rule_1(_series([3.5, 3.5, 0.0, -3.5]), L)
+    assert [o.points for o in obs] == [[1], [2], [4]]
+    assert [o.direction for o in obs] == ["above", "above", "below"]
+
+
+def test_rule_1_uses_point_numbers_not_positions():
+    obs = imr.rule_1(_series([0.0, 0.0, 3.5], point_numbers=[2, 3, 4]), L)
+    assert len(obs) == 1
+    assert obs[0].points == [4]
+    assert obs[0].span == (4, 4)
+    assert "point 4 " in obs[0].description
+
+
+def test_rule_1_copies_field_and_chart():
+    obs = imr.rule_1(_series([3.5, -3.5]), L, field="IMR_Field_X", chart="MR")
+    assert all(o.field == "IMR_Field_X" and o.chart == "MR" for o in obs)
+
+
+def test_rule_1_field_and_chart_default_empty():
+    obs = imr.rule_1(_series([3.5]), L)
+    assert obs[0].field == "" and obs[0].chart == ""
