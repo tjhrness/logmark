@@ -120,8 +120,8 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 **Step 8 — Rules 3 and 4**
 
-- [ ] Built
-- [ ] Tests green
+- [x] Built
+- [x] Tests green
 - [ ] Verify: E4's peak (point 7) is in both the rising and the falling entry; E5's tie stops Rule 3
 
 **Step 9 — Rules 5 and 6**
