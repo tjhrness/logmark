@@ -163,8 +163,8 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 **Step 13 — Chart rendering**
 
-- [ ] Built
-- [ ] Tests green
+- [x] Built
+- [x] Tests green
 - [ ] Verify: the summary describes the sample images: black dotted mean; red dotted ±1 and ±2; red solid ±3; labels at the right edge; every point numbered; black circles and red triangles; legend
 - [ ] Verify: no image files were added to the repository
 
