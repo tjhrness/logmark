@@ -184,8 +184,8 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 **Step 16 — The analysis pipeline (V10, W01)**
 
-- [ ] Built
-- [ ] Tests green
+- [x] Built
+- [x] Tests green
 - [ ] Verify: identical values → the column is rejected, the others still work; a straight line → charted normally (its MR chart shows one Rule 7 pattern — expected); 15 rows → warning, charts still drawn
 - [ ] Watch for: any mention of "V11" being implemented — it is retired in SPEC v1.1
 - [ ] Verify: the summary says the same file twice gives identical output
