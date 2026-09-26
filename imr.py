@@ -382,6 +382,68 @@ def rule_2(series: Series, lines: dict[int, float],
     return out
 
 
+def _trend_observation(series: Series, rule_no: int, direction: str,
+                       s: int, e: int, description_head: str,
+                       field: str, chart: str) -> Observation:
+    """Observation for Rules 3 and 4: differences s..e cover points s..e+1."""
+    points = series.point_numbers[s:e + 2]
+    values = series.values[s:e + 2]
+    return Observation(
+        field=field, chart=chart, rule_no=rule_no, rule_name=RULE_NAMES[rule_no],
+        direction=direction, points=points, values=values,
+        span=(points[0], points[-1]), line_or_window="",
+        description=(f"Rule {rule_no} — {description_head}: {len(points)} consecutive "
+                     f"points, {fmt_span(points[0], points[-1])}. "
+                     f"Values: {fmt_pairs(points, values)}."),
+    )
+
+
+def rule_3(series: Series, lines: dict[int, float],
+           field: str = "", chart: str = "") -> list[Observation]:
+    """Six or more points steadily rising or falling. Works on neighbour differences;
+    lines is unused. A run of m differences spans m + 1 points; a tie ends a run."""
+    labels = [None if sign == "0" else sign for sign in diff_signs(series.values)]
+    out = []
+    for sign, s, e in maximal_runs(labels):
+        if e - s + 2 < RULE_3_MIN_RUN:
+            continue
+        direction = "rising" if sign == "+" else "falling"
+        out.append(_trend_observation(
+            series, 3, direction, s, e,
+            f"Six or more points steadily {direction}", field, chart))
+    return out
+
+
+def rule_4(series: Series, lines: dict[int, float],
+           field: str = "", chart: str = "") -> list[Observation]:
+    """Fourteen or more points alternating up and down. Works on neighbour differences;
+    lines is unused. A segment of m differences spans m + 1 points; a tie or two
+    differences of the same sign in a row ends a segment."""
+    signs = diff_signs(series.values)
+    segments = []
+    start = None
+    for i, sign in enumerate(signs):
+        if sign == "0":
+            if start is not None:
+                segments.append((start, i - 1))
+            start = None
+        elif start is None:
+            start = i
+        elif sign == signs[i - 1]:
+            segments.append((start, i - 1))
+            start = i
+    if start is not None:
+        segments.append((start, len(signs) - 1))
+    out = []
+    for s, e in segments:
+        if e - s + 2 < RULE_4_MIN_RUN:
+            continue
+        out.append(_trend_observation(
+            series, 4, "alternating", s, e,
+            "Fourteen or more points alternating up and down", field, chart))
+    return out
+
+
 def _one_sd_band(lines: dict[int, float]) -> str:
     """line_or_window text shared by Rules 7 and 8."""
     return f"-1 SD={fmt(lines[-1])}; +1 SD={fmt(lines[1])}"

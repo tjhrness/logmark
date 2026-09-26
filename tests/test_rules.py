@@ -378,3 +378,122 @@ def test_rule_8_uses_point_numbers_mr_numbering():
     assert obs[0].points == list(range(2, 10))
     assert obs[0].span == (2, 9)
     assert "points, 2–9, none within" in obs[0].description
+
+
+# ===== Rules 3 and 4 (SPEC.md §5.5) =====
+
+def test_rule_3_six_rising():
+    vals = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+    obs = imr.rule_3(_series(vals), L)
+    assert len(obs) == 1
+    o = obs[0]
+    assert o.rule_no == 3
+    assert o.rule_name == imr.RULE_NAMES[3]
+    assert o.direction == "rising"
+    assert o.points == [1, 2, 3, 4, 5, 6]
+    assert o.values == vals
+    assert o.span == (1, 6)
+    assert o.line_or_window == ""
+    assert o.description == (
+        "Rule 3 — Six or more points steadily rising: 6 consecutive points, 1–6. "
+        "Values: 1=0.100, 2=0.200, 3=0.300, 4=0.400, 5=0.500, 6=0.600."
+    )
+
+
+def test_rule_3_five_rising_nothing():
+    assert imr.rule_3(_series([0.1, 0.2, 0.3, 0.4, 0.5]), L) == []
+
+
+def test_rule_3_nine_rising_one_entry():
+    obs = imr.rule_3(_series([0.1 * i for i in range(1, 10)]), L)
+    assert len(obs) == 1
+    assert obs[0].points == list(range(1, 10))
+    assert obs[0].span == (1, 9)
+
+
+def test_rule_3_six_falling():
+    obs = imr.rule_3(_series([0.6, 0.5, 0.4, 0.3, 0.2, 0.1]), L)
+    assert len(obs) == 1
+    assert obs[0].direction == "falling"
+    assert obs[0].points == [1, 2, 3, 4, 5, 6]
+    assert "steadily falling: 6 consecutive points, 1–6." in obs[0].description
+
+
+def test_rule_3_e4_peak_in_both():
+    obs = imr.rule_3(_series([1, 2, 3, 4, 5, 6, 7, 6, 5, 4, 3, 2, 1]), L)
+    assert [(o.direction, o.points) for o in obs] == [
+        ("rising", list(range(1, 8))),
+        ("falling", list(range(7, 14))),
+    ]
+    assert [o.span for o in obs] == [(1, 7), (7, 13)]
+
+
+def test_rule_3_e5_tie_splits_run():
+    assert imr.rule_3(_series([1, 2, 3, 3, 4, 5, 6, 7]), L) == []
+
+
+def test_rule_3_uses_point_numbers_mr_numbering():
+    obs = imr.rule_3(_series([0.1, 0.2, 0.3, 0.4, 0.5, 0.6], list(range(2, 8))), L)
+    assert len(obs) == 1
+    assert obs[0].points == list(range(2, 8))
+    assert obs[0].span == (2, 7)
+    assert "6 consecutive points, 2–7." in obs[0].description
+
+
+def test_rule_4_e6():
+    vals = _alternate(0.5, -0.5, 14)
+    obs = imr.rule_4(_series(vals), L)
+    assert len(obs) == 1
+    o = obs[0]
+    assert o.rule_no == 4
+    assert o.rule_name == imr.RULE_NAMES[4]
+    assert o.direction == "alternating"
+    assert o.points == list(range(1, 15))
+    assert o.values == vals
+    assert o.span == (1, 14)
+    assert o.line_or_window == ""
+    pairs = ", ".join(f"{p}={'0.500' if p % 2 else '-0.500'}" for p in range(1, 15))
+    assert o.description == (
+        "Rule 4 — Fourteen or more points alternating up and down: 14 consecutive "
+        f"points, 1–14. Values: {pairs}."
+    )
+
+
+def test_rule_4_thirteen_nothing():
+    assert imr.rule_4(_series(_alternate(0.5, -0.5, 13)), L) == []
+
+
+def test_rule_4_seventeen_one_entry():
+    obs = imr.rule_4(_series(_alternate(0.5, -0.5, 17)), L)
+    assert len(obs) == 1
+    assert obs[0].points == list(range(1, 18))
+    assert obs[0].span == (1, 17)
+
+
+def test_rule_4_e9():
+    obs = imr.rule_4(_series(_alternate(1.0, -1.0, 14)), L)
+    assert len(obs) == 1
+    assert obs[0].points == list(range(1, 15))
+
+
+def test_rule_4_repeated_value_splits():
+    # Points 10 and 11 are both -0.5; halves of 10 points each, 20 points in all.
+    vals = _alternate(0.5, -0.5, 10) + _alternate(-0.5, 0.5, 10)
+    assert len(vals) == 20
+    assert vals[9] == vals[10]
+    assert imr.rule_4(_series(vals), L) == []
+
+
+def test_rule_4_two_rises_in_a_row_split():
+    # -0.5 -> 0.0 -> 0.5 at points 10-12: two rises in a row; 20 points in all.
+    vals = _alternate(0.5, -0.5, 10) + [0.0] + _alternate(0.5, -0.5, 9)
+    assert len(vals) == 20
+    assert imr.rule_4(_series(vals), L) == []
+
+
+def test_rule_4_uses_point_numbers_mr_numbering():
+    obs = imr.rule_4(_series(_alternate(0.5, -0.5, 14), list(range(2, 16))), L)
+    assert len(obs) == 1
+    assert obs[0].points == list(range(2, 16))
+    assert obs[0].span == (2, 15)
+    assert "14 consecutive points, 2–15." in obs[0].description
