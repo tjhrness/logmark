@@ -67,8 +67,8 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 **Step 1 — Scaffold, constants, data model, guardrail test**
 
-- [ ] Built
-- [ ] Tests green
+- [x] Built
+- [x] Tests green
 - [ ] Verify: in the terminal, `python imr.py` prints a "not built yet" line and exits
 - [ ] Verify: `requirements.txt` has exactly three lines (flask, matplotlib, pytest), each with `==` and a version number
 - [ ] Verify: the summary mentions a guardrail test that checks 1.128 and 0.7557 appear once each, 2.66 / 3.267 never, and no "stdev"
