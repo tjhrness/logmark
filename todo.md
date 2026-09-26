@@ -133,8 +133,8 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 **Step 10 — `detect_all` and the fourteen worked examples**
 
-- [ ] Built
-- [ ] Tests green — all fourteen examples
+- [x] Built
+- [x] Tests green — all fourteen examples
 - [ ] Verify: the summary says **no** worked example disagreed with the engine. If it reports a disagreement, stop: bring the summary to Riya before anything else. This is the most important check in the build before Step 21
 - [ ] Watch for: the AI "correcting" the E4/E5/E14 expectations back to v1.0's shorter lists (SPEC v1.1 and the Step 10 tests agree on the complete lists)
 - [ ] Commit tag optional: `git tag engine-done` so you can always get back here
