@@ -204,3 +204,78 @@ def test_rule_1_copies_field_and_chart():
 def test_rule_1_field_and_chart_default_empty():
     obs = imr.rule_1(_series([3.5]), L)
     assert obs[0].field == "" and obs[0].chart == ""
+
+
+# ===== Maximal runs and Rule 2 (SPEC.md §5.3) =====
+
+def test_maximal_runs_example():
+    labels = ["A", "A", None, "B", "B", "B", "A"]
+    assert imr.maximal_runs(labels) == [("A", 0, 1), ("B", 3, 5), ("A", 6, 6)]
+
+
+def test_maximal_runs_empty():
+    assert imr.maximal_runs([]) == []
+
+
+def test_maximal_runs_all_none():
+    assert imr.maximal_runs([None, None]) == []
+
+
+def test_maximal_runs_single_run():
+    assert imr.maximal_runs(["A"] * 4) == [("A", 0, 3)]
+
+
+def test_rule_2_exactly_nine_above():
+    obs = imr.rule_2(_series([0.5] * 9), L)
+    assert len(obs) == 1
+    o = obs[0]
+    assert o.rule_no == 2
+    assert o.rule_name == imr.RULE_NAMES[2]
+    assert o.direction == "above"
+    assert o.points == list(range(1, 10))
+    assert o.values == [0.5] * 9
+    assert o.span == (1, 9)
+    assert o.line_or_window == "mean=0.000"
+    assert o.description == (
+        "Rule 2 — Nine or more points on one side of the mean: 9 consecutive "
+        "points above the mean (0.000), points 1–9. Values: 1=0.500, 2=0.500, "
+        "3=0.500, 4=0.500, 5=0.500, 6=0.500, 7=0.500, 8=0.500, 9=0.500."
+    )
+
+
+def test_rule_2_eight_points_nothing():
+    assert imr.rule_2(_series([0.5] * 8), L) == []
+
+
+def test_rule_2_e2_twelve_points_one_entry():
+    obs = imr.rule_2(_series([0.5] * 12), L)
+    assert len(obs) == 1
+    assert obs[0].points == list(range(1, 13))
+    assert obs[0].span == (1, 12)
+    assert obs[0].direction == "above"
+
+
+def test_rule_2_nine_below():
+    obs = imr.rule_2(_series([-0.5] * 9), L)
+    assert len(obs) == 1
+    assert obs[0].direction == "below"
+    assert "9 consecutive points below the mean (0.000)" in obs[0].description
+
+
+def test_rule_2_e3_point_on_mean_splits_run():
+    assert imr.rule_2(_series([0.5] * 5 + [0.0] + [0.5] * 5), L) == []
+
+
+def test_rule_2_two_separate_runs_in_point_order():
+    obs = imr.rule_2(_series([0.5] * 9 + [-0.5] * 9), L)
+    assert len(obs) == 2
+    assert obs[0].direction == "above" and obs[0].span == (1, 9)
+    assert obs[1].direction == "below" and obs[1].span == (10, 18)
+
+
+def test_rule_2_uses_point_numbers_mr_numbering():
+    obs = imr.rule_2(_series([0.5] * 9, list(range(2, 11))), L)
+    assert len(obs) == 1
+    assert obs[0].points == list(range(2, 11))
+    assert obs[0].span == (2, 10)
+    assert "points 2–10." in obs[0].description

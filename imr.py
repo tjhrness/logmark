@@ -344,6 +344,44 @@ def rule_1(series: Series, lines: dict[int, float],
     return out
 
 
+def maximal_runs(labels: list) -> list[tuple[object, int, int]]:
+    """Every maximal run of equal adjacent labels as (label, start, end), end inclusive.
+    A None label never forms a run and always separates runs."""
+    runs = []
+    start = 0
+    for i in range(1, len(labels) + 1):
+        if i == len(labels) or labels[i] != labels[start]:
+            if labels[start] is not None:
+                runs.append((labels[start], start, i - 1))
+            start = i
+    return runs
+
+
+def rule_2(series: Series, lines: dict[int, float],
+           field: str = "", chart: str = "") -> list[Observation]:
+    """Nine or more points on one side of the mean. One observation per maximal run."""
+    labels = ["A" if above_mean(v, lines) else "B" if below_mean(v, lines) else None
+              for v in series.values]
+    out = []
+    for label, s, e in maximal_runs(labels):
+        if e - s + 1 < RULE_2_MIN_RUN:
+            continue
+        direction = "above" if label == "A" else "below"
+        points = series.point_numbers[s:e + 1]
+        values = series.values[s:e + 1]
+        out.append(Observation(
+            field=field, chart=chart, rule_no=2, rule_name=RULE_NAMES[2],
+            direction=direction, points=points, values=values,
+            span=(points[0], points[-1]),
+            line_or_window=f"mean={fmt(lines[0])}",
+            description=(f"Rule 2 — {RULE_NAMES[2]}: {len(points)} consecutive "
+                         f"points {direction} the mean ({fmt(lines[0])}), points "
+                         f"{fmt_span(points[0], points[-1])}. "
+                         f"Values: {fmt_pairs(points, values)}."),
+        ))
+    return out
+
+
 
 # ===== SECTION 6: RENDERING =====
 
