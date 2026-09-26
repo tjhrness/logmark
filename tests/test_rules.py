@@ -598,3 +598,141 @@ def test_rule_6_five_of_five():
 
 def test_rule_6_series_shorter_than_window_nothing():
     assert imr.rule_6(_series([1.5] * 4), L) == []
+
+
+# ----- detect_all and the fourteen worked examples (SPEC.md §5.8, §5.9) -----
+
+def _summary(values):
+    return [(o.rule_no, o.direction, o.points, o.span)
+            for o in imr.detect_all(_series(values), L)]
+
+
+def _r(a, b):
+    return list(range(a, b + 1))
+
+
+E4 = [1, 2, 3, 4, 5, 6, 7, 6, 5, 4, 3, 2, 1]
+E7 = [0.5, -0.5] * 7 + [0.5]
+
+
+def test_detect_all_e1():
+    assert _summary([0, 0, 3.5]) == [(1, "above", [3], (3, 3))]
+
+
+def test_detect_all_e2():
+    assert _summary([0.5] * 12) == [(2, "above", _r(1, 12), (1, 12))]
+
+
+def test_detect_all_e3():
+    assert _summary([0.5] * 5 + [0] + [0.5] * 5) == []
+
+
+def test_detect_all_e4():
+    assert _summary(E4) == [
+        (1, "above", [4], (4, 4)),
+        (1, "above", [5], (5, 5)),
+        (1, "above", [6], (6, 6)),
+        (1, "above", [7], (7, 7)),
+        (1, "above", [8], (8, 8)),
+        (1, "above", [9], (9, 9)),
+        (1, "above", [10], (10, 10)),
+        (2, "above", _r(1, 13), (1, 13)),
+        (3, "rising", _r(1, 7), (1, 7)),
+        (3, "falling", _r(7, 13), (7, 13)),
+        (5, "above", _r(3, 11), (2, 12)),
+        (6, "above", _r(2, 12), (1, 13)),
+        (8, "either", _r(2, 12), (2, 12)),
+    ]
+    rule_8 = imr.detect_all(_series(E4), L)[-1]
+    assert "(11 above, 0 below)" in rule_8.description
+
+
+def test_detect_all_e5():
+    assert _summary([1, 2, 3, 3, 4, 5, 6, 7]) == [
+        (1, "above", [5], (5, 5)),
+        (1, "above", [6], (6, 6)),
+        (1, "above", [7], (7, 7)),
+        (1, "above", [8], (8, 8)),
+        (5, "above", _r(3, 8), (2, 8)),
+        (6, "above", _r(2, 8), (1, 8)),
+    ]
+
+
+def test_detect_all_e6():
+    assert _summary([0.5, -0.5] * 7) == [(4, "alternating", _r(1, 14), (1, 14))]
+
+
+def test_detect_all_e7():
+    assert _summary(E7) == [
+        (4, "alternating", _r(1, 15), (1, 15)),
+        (7, "within", _r(1, 15), (1, 15)),
+    ]
+
+
+def test_detect_all_e8():
+    assert _summary([1.5, -1.5] * 4) == [(8, "either", _r(1, 8), (1, 8))]
+    obs = imr.detect_all(_series([1.5, -1.5] * 4), L)
+    assert "(4 above, 4 below)" in obs[0].description
+
+
+def test_detect_all_e9():
+    assert _summary([1, -1] * 7) == [(4, "alternating", _r(1, 14), (1, 14))]
+
+
+def test_detect_all_e10():
+    assert _summary([2.5, 0, 2.5]) == [(5, "above", [1, 3], (1, 3))]
+
+
+def test_detect_all_e11():
+    assert _summary([2.5, 0, 2.5, 2.5, 0, 0]) == [(5, "above", [1, 3, 4], (1, 5))]
+
+
+def test_detect_all_e12():
+    assert _summary([1.5, 1.5, 0, 1.5, 1.5]) == [(6, "above", [1, 2, 4, 5], (1, 5))]
+
+
+def test_detect_all_e13():
+    assert _summary([0.5, -0.5] * 8) == [
+        (4, "alternating", _r(1, 16), (1, 16)),
+        (7, "within", _r(1, 16), (1, 16)),
+    ]
+
+
+def test_detect_all_e14():
+    assert _summary([0.5] * 7 + [1.0] + [0.5] * 7) == [(2, "above", _r(1, 15), (1, 15))]
+
+
+def test_pattern_points_e7_union_once():
+    obs = imr.detect_all(_series(E7), L)
+    assert all(3 in o.points for o in obs if o.rule_no in (4, 7))
+    assert imr.pattern_points(obs) == set(range(1, 16))
+
+
+def test_pattern_points_empty():
+    assert imr.pattern_points([]) == set()
+
+
+def test_detect_all_stamps_field_and_chart():
+    obs = imr.detect_all(_series(E4), L, field="IMR_Field_A", chart="I")
+    assert obs
+    assert all(o.field == "IMR_Field_A" and o.chart == "I" for o in obs)
+
+
+def test_detect_all_mr_numbering_end_to_end():
+    x = [0, 3, 0, 3, 0, 3, 0, 3, 0, 3]
+    mr = imr.moving_range_series(x)
+    assert mr.point_numbers == _r(2, 10)
+    obs = imr.detect_all(mr, L)
+    assert all(2 <= p <= 10 for o in obs for p in o.points)
+    rule_2 = [o for o in obs if o.rule_no == 2]
+    assert len(rule_2) == 1
+    assert rule_2[0].points == _r(2, 10)
+    assert rule_2[0].span == (2, 10)
+
+
+def test_detect_all_ordering_e4():
+    obs = imr.detect_all(_series(E4), L)
+    rules = [o.rule_no for o in obs]
+    assert rules == sorted(rules)
+    firsts = [o.points[0] for o in obs if o.rule_no == 1]
+    assert firsts == sorted(firsts) and len(set(firsts)) == len(firsts)

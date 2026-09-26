@@ -554,6 +554,23 @@ def rule_8(series: Series, lines: dict[int, float],
     return out
 
 
+RULE_FUNCTIONS = (rule_1, rule_2, rule_3, rule_4, rule_5, rule_6, rule_7, rule_8)
+
+
+def detect_all(series: Series, lines: dict[int, float],
+               field: str = "", chart: str = "") -> list[Observation]:
+    """Run all eight rules; order by (rule_no, first listed point), stable for ties."""
+    out = []
+    for rule in RULE_FUNCTIONS:
+        out.extend(rule(series, lines, field=field, chart=chart))
+    return sorted(out, key=lambda o: (o.rule_no, o.points[0]))
+
+
+def pattern_points(observations: list[Observation]) -> set[int]:
+    """Every point caught by any rule, each counted once."""
+    return {p for o in observations for p in o.points}
+
+
 
 # ===== SECTION 6: RENDERING =====
 
