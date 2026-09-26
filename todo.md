@@ -76,8 +76,8 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 **Step 2 — Moving ranges, I-chart statistics and display formatting**
 
-- [ ] Built
-- [ ] Tests green
+- [x] Built
+- [x] Tests green
 - [ ] Verify: the summary says I-chart sigma = average moving range ÷ 1.128
 - [ ] Verify: the summary mentions the "level shift" test — sigma stays small when the data jumps from 10 to 20, unlike STDEV.S
 - [ ] Watch for: any mention of STDEV.S, "sample standard deviation" or "population SD" as the basis of the lines — wrong method
