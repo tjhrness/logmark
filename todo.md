@@ -234,17 +234,17 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 - [x] Built; files staged, **not committed**
 - [x] Tests green
-- [ ] The AI's own hand check of Rule5 and Rule7 matched
-- [ ] **Your check in Excel, using `docs/answer_key_check.md` (about 30 minutes — Appendix C.1).** No STDEV.S anywhere — every line comes from the moving ranges:
-  - [ ] IMR_Field_Rule5 (column E): `=AVERAGE(E2:E41)` matches the mean to 3 decimals
-  - [ ] IMR_Field_Rule5: moving ranges in a spare column (`=ABS(E3-E2)` filled down to row 41); their `=AVERAGE` matches the "Average moving range" row
-  - [ ] IMR_Field_Rule5: sigma = average moving range ÷ 1.128 matches the sigma row
-  - [ ] IMR_Field_Rule5: all seven lines match (mean + k × sigma)
-  - [ ] IMR_Field_Rule5: the points listed for Rule 5 really are 2-of-3 beyond the ±2 SD line, same side
-  - [ ] IMR_Field_Rule7 (column G): mean, average moving range, sigma and the ±1 SD lines match
-  - [ ] IMR_Field_Rule7: the listed points really are 15+ in a row strictly between the ±1 SD lines
-  - [ ] IMR_Field_Rule1 MR chart (column A): moving ranges via `=ABS(A3-A2)` filled down; centre = their average; sigma = 0.7557 × average; +3 SD ≈ 3.267 × average; −2 and −3 SD below zero
-- [ ] All matched → `git commit -m "Step 21: answer key (owner-verified)"`
+- [x] The AI's own hand check of Rule5 and Rule7 matched
+- [x] **Your check in Excel, using `docs/answer_key_check.md` (about 30 minutes — Appendix C.1).** No STDEV.S anywhere — every line comes from the moving ranges:
+  - [x] IMR_Field_Rule5 (column E): `=AVERAGE(E2:E41)` matches the mean to 3 decimals
+  - [x] IMR_Field_Rule5: moving ranges in a spare column (`=ABS(E3-E2)` filled down to row 41); their `=AVERAGE` matches the "Average moving range" row
+  - [x] IMR_Field_Rule5: sigma = average moving range ÷ 1.128 matches the sigma row
+  - [x] IMR_Field_Rule5: all seven lines match (mean + k × sigma)
+  - [x] IMR_Field_Rule5: the points listed for Rule 5 really are 2-of-3 beyond the ±2 SD line, same side
+  - [x] IMR_Field_Rule7 (column G): mean, average moving range, sigma and the ±1 SD lines match
+  - [x] IMR_Field_Rule7: the listed points really are 15+ in a row strictly between the ±1 SD lines
+  - [x] IMR_Field_Rule1 MR chart (column A): moving ranges via `=ABS(A3-A2)` filled down; centre = their average; sigma = 0.7557 × average; +3 SD ≈ 3.267 × average; −2 and −3 SD below zero
+- [x] All matched → `git commit -m "Step 21: answer key (owner-verified)"` — done, commit `aa93020`
 - [ ] Anything differed → **do not commit**; bring the difference to Riya
 
 ---
