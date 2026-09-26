@@ -246,6 +246,53 @@ def fmt(x: float) -> str:
 
 # ===== SECTION 5: RULE ENGINE =====
 
+# Zone predicates (SPEC.md §5.1). Every rule compares values with lines or neighbours
+# only through these. Comparisons are strict; a value on a line belongs to neither side.
+
+def on_line(v: float, line_value: float) -> bool:
+    """True when v is exactly on the line, within ON_LINE_TOLERANCE scaled by the line."""
+    return abs(v - line_value) <= ON_LINE_TOLERANCE * max(1, abs(line_value))
+
+
+def above_mean(v: float, lines: dict[int, float]) -> bool:
+    return v > lines[0] and not on_line(v, lines[0])
+
+
+def below_mean(v: float, lines: dict[int, float]) -> bool:
+    return v < lines[0] and not on_line(v, lines[0])
+
+
+def beyond_above(v: float, lines: dict[int, float], k: int) -> bool:
+    """True when v is strictly above the +k SD line (k = 1, 2, 3)."""
+    return v > lines[k] and not on_line(v, lines[k])
+
+
+def beyond_below(v: float, lines: dict[int, float], k: int) -> bool:
+    """True when v is strictly below the -k SD line (k = 1, 2, 3; k is positive)."""
+    return v < lines[-k] and not on_line(v, lines[-k])
+
+
+def within_1(v: float, lines: dict[int, float]) -> bool:
+    return (lines[-1] < v < lines[1]
+            and not on_line(v, lines[-1]) and not on_line(v, lines[1]))
+
+
+def outside_1(v: float, lines: dict[int, float]) -> bool:
+    return beyond_above(v, lines, 1) or beyond_below(v, lines, 1)
+
+
+def diff_sign(a: float, b: float) -> str:
+    """Sign of the step from a (earlier) to b (later): "+", "-", or "0" when equal."""
+    if abs(a - b) <= ON_LINE_TOLERANCE * max(1, abs(a), abs(b)):
+        return "0"
+    return "+" if b > a else "-"
+
+
+def diff_signs(values: list[float]) -> list[str]:
+    """The n - 1 signs between adjacent values."""
+    return [diff_sign(values[i], values[i + 1]) for i in range(len(values) - 1)]
+
+
 
 # ===== SECTION 6: RENDERING =====
 
