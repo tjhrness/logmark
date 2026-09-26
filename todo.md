@@ -145,8 +145,8 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 **Step 11 — File-level parsing and validation (V02–V07)**
 
-- [ ] Built
-- [ ] Tests green: one per code V02–V07, plus "several problems reported together"
+- [x] Built
+- [x] Tests green: one per code V02–V07, plus "several problems reported together"
 - [ ] Verify: the summary quotes at least one message in the three-part shape (what happened · where · what to do)
 
 **Step 12 — Cell values and `parse_csv` (V08, V09)**
