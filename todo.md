@@ -224,8 +224,8 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 **Step 20 — Sample dataset**
 
-- [ ] Built
-- [ ] Tests green
+- [x] Built
+- [x] Tests green
 - [ ] Verify: the summary lists, for each of the nine columns, where the pattern is and every rule it triggers on each chart
 - [ ] Open `sample/sample_imr.csv` in Excel: 40 rows, ten columns, plain numbers, a Notes column with text
 - [ ] Watch for: any change to `imr.py` in this step — there should be none
