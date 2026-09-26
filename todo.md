@@ -176,8 +176,8 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 **Step 15 — Column-section HTML and the standalone report**
 
-- [ ] Built
-- [ ] Tests green
+- [x] Built
+- [x] Tests green
 - [ ] Verify: the summary table has an "Average moving range (MR-bar)" row and a sigma row labelled "Sigma (MR-bar / 1.128)" (I) or "Sigma (0.7557 x MR-bar)" (MR)
 - [ ] Verify: the report has no form, no download links, and no web addresses
 - [ ] Verify: "(below 0, not drawn)" appears only on the MR table's negative lines
