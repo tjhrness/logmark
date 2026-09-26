@@ -754,6 +754,14 @@ Y_MARGIN_FRACTION = 0.08
 Y_TOP_MARGIN_FRACTION = 0.14  # extra headroom for the number label above the highest point
 FLAT_Y_MARGIN = 1.0
 
+# Fixed page margins in inches around the plot area. A fixed layout replaces
+# bbox_inches="tight", which drew every chart twice (SPEC.md §2.3 time budget),
+# and keeps the PNG at exactly the §6.2 figure size.
+MARGIN_LEFT_IN = 1.1     # y tick labels (up to "-1000000") and y-axis label
+MARGIN_RIGHT_IN = 0.6    # line labels at the right-hand end of each line
+MARGIN_BOTTOM_IN = 0.6   # x tick labels and x-axis label
+MARGIN_TOP_IN = 0.4      # chart title
+
 
 def figure_width_inches(n_points_on_i_chart: int) -> float:
     """Chart width in inches: max(FIG_MIN_WIDTH_IN, FIG_WIDTH_PER_POINT_IN x N) (SPEC.md §6.2)."""
@@ -807,9 +815,13 @@ def render_chart(series: Series, stats: ChartStats, pattern_pts: set[int], title
             ax.plot([p for p, _ in flagged], [v for _, v in flagged], linestyle="None",
                     marker="^", markersize=8, color="red", zorder=4)
 
+        # Plain text shifted 5 points up draws the same as annotate(textcoords="offset
+        # points", xytext=(0, 5)) at a fraction of the cost per label.
+        label_offset = ax.transData + matplotlib.transforms.ScaledTranslation(
+            0, 5 / 72, fig.dpi_scale_trans)
         for p, v in zip(xs, ys):
-            ax.annotate(str(p), (p, v), textcoords="offset points", xytext=(0, 5),
-                        ha="center", fontsize=7, zorder=5)
+            ax.text(p, v, str(p), transform=label_offset, ha="center", va="baseline",
+                    fontsize=7, zorder=5)
 
         ax.set_xlim(x_min, x_max)
         ax.set_xticks(x_ticks(n_total))
@@ -833,11 +845,15 @@ def render_chart(series: Series, stats: ChartStats, pattern_pts: set[int], title
             ],
             loc="upper left", fontsize=7,
         )
-        ax.set_title(title)
-        fig.subplots_adjust(right=0.92)
+        # Explicit y=1.0 is where the title sits anyway (no ticks on top); it skips
+        # matplotlib's costly automatic title placement check.
+        ax.set_title(title, y=1.0)
+        width_in = figure_width_inches(n_total)
+        fig.subplots_adjust(left=MARGIN_LEFT_IN / width_in, right=1 - MARGIN_RIGHT_IN / width_in,
+                            bottom=MARGIN_BOTTOM_IN / FIG_HEIGHT_IN, top=1 - MARGIN_TOP_IN / FIG_HEIGHT_IN)
 
         buf = io.BytesIO()
-        fig.savefig(buf, format="png", bbox_inches="tight", metadata={"Software": None})
+        fig.savefig(buf, format="png", metadata={"Software": None})
         return buf.getvalue()
     finally:
         plt.close(fig)
