@@ -196,8 +196,8 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 **Step 17 — Upload page and `/analyze`**
 
-- [ ] Built
-- [ ] Tests green
+- [x] Built
+- [x] Tests green
 - [ ] Verify: the summary confirms a crash shows a plain "Something went wrong…" page, with details only in the console
 
 **Step 18 — Downloads**
