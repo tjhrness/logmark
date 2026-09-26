@@ -1044,6 +1044,123 @@ def analyse(parsed: ParsedFile, analysed_at: datetime | None = None) -> Analysis
 
 # ===== SECTION 8: FLASK APP AND ROUTES =====
 
+from flask import Flask, request, Response
+
+# The most recent successful analysis, kept in memory only until the next upload
+# (SPEC.md §8: no files, no database).
+LAST_RESULT: AnalysisResult | None = None
+
+NO_FILE_MESSAGE = "No file was selected. Choose a .csv file and click Analyze."
+
+PAGE_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>IMR Control Chart Tool</title>
+<style>
+__CSS__
+.errors { border: 2px solid #c00; background: #fee; color: #900; padding: 0.5em 1em; margin: 1em 0; }
+</style>
+</head>
+<body>
+<h1>IMR Control Chart Tool</h1>
+__ERRORS__
+<form method="post" action="/analyze" enctype="multipart/form-data">
+<input type="file" name="file" accept=".csv">
+<button type="submit">Analyze</button>
+</form>
+__RESULTS__
+</body>
+</html>
+"""
+
+UNEXPECTED_ERROR_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>IMR Control Chart Tool</title>
+</head>
+<body>
+<h1>IMR Control Chart Tool</h1>
+<p>__MESSAGE__</p>
+<p><a href="/">Back to the upload page</a></p>
+</body>
+</html>
+"""
+
+
+def reset_state() -> None:
+    """Forget the last result (used by tests)."""
+    global LAST_RESULT
+    LAST_RESULT = None
+
+
+def render_page(errors: list[str] | None = None, result: AnalysisResult | None = None) -> str:
+    """The upload page: error box above the form, then the results of one file."""
+    errors_html = ""
+    if errors:
+        items = "\n".join(f"<li>{html.escape(message)}</li>" for message in errors)
+        errors_html = ('<div class="errors">\n<p>The file was not analysed.</p>\n'
+                       f"<ul>\n{items}\n</ul>\n</div>")
+    results_html = ""
+    if result is not None:
+        header = (f"<h2>Results for {html.escape(result.source_filename)}</h2>\n"
+                  f"<p>Analysed at {html.escape(timestamp_text(result.analysed_at))}</p>")
+        sections = "\n".join(build_column_section_html(column, include_downloads=False)
+                             for column in result.columns)
+        results_html = f'<div class="results">\n{header}\n{sections}\n</div>'
+    return (PAGE_TEMPLATE
+            .replace("__CSS__", REPORT_CSS)
+            .replace("__ERRORS__", errors_html)
+            .replace("__RESULTS__", results_html))
+
+
+def html_response(body: str, status: int) -> Response:
+    return Response(body, status=status, mimetype="text/html")
+
+
+def create_app() -> Flask:
+    """Build the Flask app with the upload page and the analyse action (SPEC.md §9.3)."""
+    app = Flask(__name__)
+    app.debug = False
+
+    @app.get("/")
+    def index() -> Response:
+        return html_response(render_page(result=LAST_RESULT), 200)
+
+    @app.post("/analyze")
+    def analyze() -> Response:
+        global LAST_RESULT
+        # Whatever happens next, the screen must show at most one file's results.
+        LAST_RESULT = None
+        upload = request.files.get("file")
+        if upload is None or not upload.filename:
+            return html_response(render_page(errors=[NO_FILE_MESSAGE]), 400)
+        filename = upload.filename
+        try:
+            parsed = parse_csv(upload.read(), filename)
+        except ValidationErrors as exc:
+            return html_response(render_page(errors=[i.message for i in exc.issues]), 400)
+        except Exception:
+            return unexpected_error(filename)
+        try:
+            result = analyse(parsed)
+        except Exception:
+            return unexpected_error(filename)
+        LAST_RESULT = result
+        return html_response(render_page(result=result), 200)
+
+    return app
+
+
+def unexpected_error(filename: str) -> Response:
+    """Print the traceback to the console; show the browser only a plain message (SPEC.md §7.4)."""
+    traceback.print_exc()
+    message = (f"Something went wrong while analysing {filename}. "
+               "The details have been printed in the console window.")
+    body = UNEXPECTED_ERROR_TEMPLATE.replace("__MESSAGE__", html.escape(message))
+    return html_response(body, 500)
+
 
 # ===== SECTION 9: ENTRY POINT =====
 
