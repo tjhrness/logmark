@@ -102,8 +102,8 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 **Step 5 — Rule 1 and observation formatting**
 
-- [ ] Built
-- [ ] Tests green
+- [x] Built
+- [x] Tests green
 - [ ] Verify: the summary quotes the example sentence "Rule 1 — One point beyond 3 SD: point 3 (value 3.500) is above the +3 SD line (3.000)."
 
 **Step 6 — Maximal runs and Rule 2**
