@@ -266,41 +266,41 @@ Each is a deliberate decision that a code-generation tool will read as an oversi
 
 Do this yourself after Step 22, with `python imr.py`.
 
-- [ ] 1. `python imr.py` opens the browser on the upload page
-- [ ] 2. Upload `sample/sample_imr.csv`: nine sections appear; the Notes column is not charted
-- [ ] 3. Every point on every chart carries a number; pattern points are red triangles, the rest black circles
-- [ ] 4. Seven lines on the I chart: mean black dotted, ±1/±2 red dotted, ±3 red solid, each labelled at the right
-- [ ] 5. The MR chart sits directly under the I chart at the same width; its first point is numbered 2
-- [ ] 6. Under each chart: the summary table, then the observations (or "No Nelson patterns detected.")
-- [ ] 7. IMR_Field_Clean shows no patterns on either chart
-- [ ] 8. The IMR_Field_Rule5 observation lists only the out-of-zone points and names the window
-- [ ] 9. For one column, recompute in Excel the mean, the moving ranges, their average, and sigma (= average ÷ 1.128) — they match the summary table to 3 decimals
-- [ ] 10. Upload a file with 15 rows: the warning appears above the I chart; charts still render
-- [ ] 11. Upload a file with one blank cell: file rejected; the message names the column, the Excel row and the point
-- [ ] 12. Download the report; turn Wi-Fi off; open it — charts and text all intact
-- [ ] 13. Download a PNG: it's the same image as on the page
-- [ ] 14. Download the observations CSV; open in Excel: the columns match SPEC.md §6.7
+- [x] 1. `python imr.py` opens the browser on the upload page
+- [x] 2. Upload `sample/sample_imr.csv`: nine sections appear; the Notes column is not charted
+- [x] 3. Every point on every chart carries a number; pattern points are red triangles, the rest black circles
+- [x] 4. Seven lines on the I chart: mean black dotted, ±1/±2 red dotted, ±3 red solid, each labelled at the right
+- [x] 5. The MR chart sits directly under the I chart at the same width; its first point is numbered 2
+- [x] 6. Under each chart: the summary table, then the observations (or "No Nelson patterns detected.")
+- [x] 7. IMR_Field_Clean shows no patterns on either chart
+- [x] 8. The IMR_Field_Rule5 observation lists only the out-of-zone points and names the window
+- [x] 9. For one column, recompute in Excel the mean, the moving ranges, their average, and sigma (= average ÷ 1.128) — they match the summary table to 3 decimals
+- [x] 10. Upload a file with 15 rows: the warning appears above the I chart; charts still render
+- [x] 11. Upload a file with one blank cell: file rejected; the message names the column, the Excel row and the point
+- [x] 12. Download the report; turn Wi-Fi off; open it — charts and text all intact
+- [x] 13. Download a PNG: it's the same image as on the page
+- [x] 14. Download the observations CSV; open in Excel: the columns match SPEC.md §6.7
 
 Extra checks worth two minutes each:
 
-- [ ] Upload a `.xlsx` by mistake: a clear "not a .csv file" message, no crash
-- [ ] Upload a file with no `IMR_Field` column: the message lists the columns it did find
-- [ ] Upload a file with a bad cell **and** a ragged row: both problems listed at once
-- [ ] Upload a good file, then a bad one: the old results disappear
-- [ ] Upload a file with a column name containing a space: the PNG downloads with `_` in its name
-- [ ] Put a 30-row column of identical values beside a normal column: that column shows a red box, the other charts normally
-- [ ] Put a perfectly straight column (1, 2, 3 … 30) in a file: it is charted, not rejected
-- [ ] A real dataset of yours (30–100 points): the charts are readable at 100 points and the observations make sense to you as a Black Belt
+- [x] Upload a `.xlsx` by mistake: a clear "not a .csv file" message, no crash
+- [x] Upload a file with no `IMR_Field` column: the message lists the columns it did find
+- [x] Upload a file with a bad cell **and** a ragged row: both problems listed at once
+- [x] Upload a good file, then a bad one: the old results disappear
+- [x] Upload a file with a column name containing a space: the PNG downloads with `_` in its name
+- [x] Put a 30-row column of identical values beside a normal column: that column shows a red box, the other charts normally
+- [x] Put a perfectly straight column (1, 2, 3 … 30) in a file: it is charted, not rejected
+- [x] A real dataset of yours (30–100 points): the charts are readable at 100 points and the observations make sense to you as a Black Belt
 
 ---
 
 ## 10. Done (SPEC.md §13.1)
 
-- [ ] All tests pass (§12.1–12.8)
-- [ ] The answer key was independently verified by you in Excel (Step 21)
-- [ ] The §12.9 checklist passed (section 9 above)
+- [x] All tests pass (§12.1–12.8)
+- [x] The answer key was independently verified by you in Excel (Step 21)
+- [x] The §12.9 checklist passed (section 9 above)
 - [x] D1–D3 settled and recorded in SPEC.md v1.1 Appendix B
-- [ ] Final commit and `v1.0` tag in place
+- [ ] Final commit and `v1.0` tag in place — final commit done; tag still to be created on GitHub
 
 ---
 
