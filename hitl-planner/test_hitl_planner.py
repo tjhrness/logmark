@@ -12,6 +12,225 @@ import pytest
 import hitl_planner as hp
 
 
+def test_log_failure_response_and_all_issue_prefill_boundary(tmp_path,monkeypatch):
+    client=hp.create_app({'schema_version':1,'workspace':str(tmp_path),'port':5062}).test_client()
+    info=hp.save_plan(tmp_path,scenario(system='All issues',N=100))
+    hp.save_actuals(tmp_path,info['plan_id'],dict(reviewed=100,issues=100,agreement=1,notes=''))
+    result=client.get('/api/prefill?system=All%20issues').json
+    assert result['inputs']['p']==1
+    assert client.post('/api/calc',json={**result['inputs'],'N':100}).status_code==400
+    path=tmp_path/'plans_log.csv';before=path.read_bytes()
+    replace=hp.os.replace
+    def fail(source,target):
+        if Path(target).name=='plans_log.csv':
+            raise PermissionError('Excel has locked the CSV')
+        return replace(source,target)
+    monkeypatch.setattr(hp.os,'replace',fail)
+    response=client.get('/api/log/rebuild')
+    assert response.status_code==503 and response.is_json
+    assert path.read_bytes()==before and not list(tmp_path.glob('*.tmp'))
+
+
+def test_full_isolated_lifecycle_all_fifteen_endpoints(tmp_path,monkeypatch):
+    import csv
+    import threading
+    config=hp.load_config(tmp_path/'config.json',home=tmp_path)
+    config['port']=5062
+    client=hp.create_app(config).test_client()
+    assert client.get('/').status_code==200
+    assert client.get('/api/health').json['workspace_ok']
+    assert client.post('/api/calc',json=scenario()).json['outputs']['n_headline']==382
+    v1=client.post('/api/plans',json=scenario()).json
+    folder=Path(v1['folder']);original=(folder/'plan_v1.json').read_bytes()
+    assert client.post('/api/plans',json=scenario()).json['version']==2
+    assert (folder/'plan_v1.json').read_bytes()==original
+    assert client.get('/api/plans').json[0]['version']==2
+    detail=client.get('/api/plans/'+v1['plan_id']).json
+    assert detail['plan']['plan']['version']==2
+    assert client.get('/api/systems').json==['HR Helpdesk Bot']
+    assert client.get('/api/prefill?system=HR%20Helpdesk%20Bot').json['inputs']['N'] is None
+    data=dict(plan_id=v1['plan_id'],plan_version=2,reviewed=382,issues=11,agreement=.86,notes='Calibration, complete\n第二行')
+    assert client.post('/api/actuals/calc',json=data).json['outputs']['display']['observed_rate']=='2.9%'
+    assert client.post('/api/plans/'+v1['plan_id']+'/actuals',json=data).json['version']==1
+    old_actuals=(folder/'actuals_v1.json').read_bytes()
+    assert client.post('/api/plans/'+v1['plan_id']+'/actuals',json=data).json['version']==2
+    assert (folder/'actuals_v1.json').read_bytes()==old_actuals
+    assert '<h2>Actuals</h2>' in (folder/'report.html').read_text(encoding='utf-8')
+    prefill=client.get('/api/prefill?system=hr%20helpdesk%20bot').json
+    assert prefill['p_source']=='last_observed' and prefill['inputs']['p']==11/382
+    rebuilt=client.get('/api/log/rebuild').json
+    assert rebuilt['rows']==1 and Path(rebuilt['path']).read_bytes().startswith(b'\xef\xbb\xbf')
+    with Path(rebuilt['path']).open(encoding='utf-8-sig',newline='') as stream:
+        row=next(csv.DictReader(stream))
+    assert row['plan_version']=='2' and row['actuals_version']=='2' and row['notes']==data['notes']
+    opened=[];monkeypatch.setattr(hp.os,'startfile',lambda p:opened.append(p),raising=False)
+    for endpoint in ('open-report','open-folder'):
+        assert client.post('/api/'+endpoint,json={'plan_id':v1['plan_id']}).json['ok']
+    assert opened==[v1['report_path'],v1['folder']]
+    assert client.get('/api/method').json['integrity_check']=={'passed':11,'total':11}
+    stopped=threading.Event();client.application.config['SHUTDOWN_CALLBACK']=stopped.set
+    assert client.post('/api/quit').json=={'ok':True} and stopped.wait(1)
+    assert set(config)=={'schema_version','workspace','port'}
+
+
+def test_offline_assets_and_accessible_tab_contract(tmp_path):
+    from html.parser import HTMLParser
+    class Assets(HTMLParser):
+        def __init__(self):
+            super().__init__();self.external=[];self.tabs=[];self.panels=[]
+        def handle_starttag(self,tag,attrs):
+            attrs=dict(attrs)
+            self.external.extend(v for k,v in attrs.items() if k in ('href','src','action') and v and v.startswith(('http:','https:','//')))
+            if attrs.get('role')=='tab':
+                self.tabs.append(attrs)
+            if attrs.get('role')=='tabpanel':
+                self.panels.append(attrs)
+    client=hp.create_app({'schema_version':1,'workspace':str(tmp_path),'port':5062}).test_client()
+    root=Assets();root.feed(client.get('/').text)
+    assert not root.external and len(root.tabs)==4 and len(root.panels)==4
+    assert {t['aria-controls'] for t in root.tabs}=={p['id'] for p in root.panels}
+    info=hp.save_plan(tmp_path,scenario())
+    report=Assets();report.feed(Path(info['report_path']).read_text(encoding='utf-8'))
+    assert not report.external
+
+
+def test_concurrent_plan_actuals_collision_and_statelessness(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    app=hp.create_app({'schema_version':1,'workspace':str(tmp_path),'port':5062})
+    def save(system):
+        with app.test_client() as client:
+            response=client.post('/api/plans',json=scenario(system=system))
+            assert response.status_code==200
+            return response.json
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        infos=list(pool.map(save,['A/B','A:B','A/B','A:B']))
+    assert {i['plan_id'] for i in infos}=={'2026-10 - AB','2026-10 - AB (2)'}
+    for folder in (tmp_path/'2026-10 - AB',tmp_path/'2026-10 - AB (2)'):
+        assert len(list(folder.glob('plan_v*.json')))==2
+    info=infos[0]
+    original={p:p.read_bytes() for p in tmp_path.rglob('plan_v*.json')}
+    def actual(count):
+        with app.test_client() as client:
+            response=client.post('/api/plans/'+info['plan_id']+'/actuals',json=dict(reviewed=382,issues=count,agreement=.86,notes=''))
+            assert response.status_code==200
+            return response.json['version']
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        versions=list(pool.map(actual,[0,11]))
+    assert sorted(versions)==[1,2]
+    assert original=={p:p.read_bytes() for p in tmp_path.rglob('plan_v*.json')}
+    with app.test_client() as client:
+        a=client.post('/api/calc',json=scenario(system='First')).json
+        client.post('/api/calc',json=scenario(system='Second',N=1))
+        assert client.post('/api/calc',json=scenario(system='First')).json==a
+    assert not (tmp_path/'.write-lock').exists() and not list(tmp_path.rglob('*.tmp'))
+
+
+def test_api_failure_resilience_workspace_recovery_and_json_errors(tmp_path,monkeypatch):
+    app=hp.create_app({'schema_version':1,'workspace':str(tmp_path),'port':5062})
+    client=app.test_client()
+    assert client.get('/missing').status_code==404 and client.get('/missing').is_json
+    assert client.post('/api/plans',data='{',content_type='application/json').status_code==400
+    health=hp.workspace_health
+    monkeypatch.setattr(hp,'workspace_health',lambda w:(False,'Drive is full: '+str(w)))
+    response=client.get('/api/health')
+    assert response.json['workspace_ok'] is False
+    assert 'Drive is full' in client.get('/').text
+    assert client.post('/api/plans',json=scenario()).status_code==503
+    assert not list(tmp_path.rglob('plan_v*.json'))
+    assert client.post('/api/calc',json=scenario()).status_code==200
+    monkeypatch.setattr(hp,'workspace_health',health)
+    assert client.get('/api/health').json['workspace_ok'] is True
+    assert client.post('/api/plans',json=scenario()).status_code==200
+    def fail(*args,**kwargs):
+        raise RuntimeError('private traceback detail')
+    monkeypatch.setattr(hp,'calculate_response',fail)
+    response=client.post('/api/calc',json=scenario())
+    assert response.status_code==500 and response.json=={'error':'Unexpected error','details':'RuntimeError'}
+    assert 'Traceback' not in response.text and 'private traceback' not in response.text
+
+
+def test_corrupt_record_types_and_invalid_config_schema(tmp_path):
+    info=hp.save_plan(tmp_path,scenario())
+    original=Path(info['folder'])/'plan_v1.json'
+    record=json.loads(original.read_text(encoding='utf-8'))
+    record['plan']['version']=2
+    record['outputs']['n_headline']='bad'
+    hp.write_json(Path(info['folder'])/'plan_v2.json',record,immutable=True)
+    assert hp.list_plans(tmp_path)[0]['unreadable']
+    config=tmp_path/'bad-config.json'
+    hp.atomic_write(config,json.dumps(dict(schema_version=True,workspace=str(tmp_path),port=5062)))
+    before=config.read_bytes()
+    with pytest.raises(hp.ConfigError):
+        hp.load_config(config)
+    assert config.read_bytes()==before
+
+
+def test_selftest_process_and_injected_failure_gate(tmp_path,monkeypatch,capsys):
+    process=subprocess.run([sys.executable,str(Path(hp.__file__).resolve()),'--selftest'],cwd=tmp_path,capture_output=True,text=True,timeout=10)
+    assert process.returncode==0 and process.stdout.count('PASS K')==11
+    assert list(tmp_path.iterdir())==[]
+    info=hp.save_plan(tmp_path,scenario())
+    original=(Path(info['folder'])/'plan_v1.json').read_bytes()
+    monkeypatch.setitem(hp.Z,.95,1.95996)
+    assert hp.main(['--selftest'])==1
+    assert 'FAIL K1' in capsys.readouterr().out
+    client=hp.create_app({'schema_version':1,'workspace':str(tmp_path),'port':5062}).test_client()
+    assert 'Answer key failed: cases' in client.get('/').text
+    assert 'Results cannot be trusted; saving is disabled.' in client.get('/').text
+    status=client.get('/api/method').json
+    assert status['integrity_check']['passed']<11 and 'K1' in status['failed_cases']
+    assert client.post('/api/plans',json=scenario()).status_code==503
+    assert client.post('/api/plans/'+info['plan_id']+'/actuals',json=dict(reviewed=382,issues=0,agreement=.8,notes='')).status_code==503
+    assert client.post('/api/calc',json=scenario()).status_code==200
+    assert (Path(info['folder'])/'plan_v1.json').read_bytes()==original
+    assert not list(tmp_path.rglob('actuals_v*.json'))
+
+
+def test_method_api_and_live_trace_contract(tmp_path):
+    client=hp.create_app({'schema_version':1,'workspace':str(tmp_path),'port':5062}).test_client()
+    response=client.get('/api/method')
+    assert response.status_code==200
+    method=response.json
+    assert method['constants']['Z']=={'0.90':1.645,'0.95':1.960,'0.99':2.576}
+    assert set(method['formulas'])=={f'F{i}' for i in range(1,11)}
+    assert method['method_version']=='1.0' and method['tool_version']=='1.0.0'
+    assert method['integrity_check']=={'passed':11,'total':11}
+    assert 'Cochran' in method['references'][0] and len(method['assumptions'])==6
+    html=client.get('/').text
+    for name in ('method-integrity','method-formulas','method-assumptions','method-arithmetic','method-references'):
+        assert f'id="{name}"' in html
+    absolute=client.post('/api/calc',json=scenario()).json
+    assert any('382' in line for line in absolute['arithmetic'])
+    relative=client.post('/api/calc',json=scenario(margin_mode='relative',margin_input=.25,p=.04)).json
+    assert any('0.01' in line for line in relative['arithmetic'])
+
+
+def test_history_csv_prefill_consistency_with_corrupt_actuals(tmp_path):
+    import csv
+    client=hp.create_app({'schema_version':1,'workspace':str(tmp_path),'port':5062}).test_client()
+    valid=hp.save_plan(tmp_path,scenario(system='Valid'))
+    hp.save_plan(tmp_path,scenario(system='Second'))
+    hp.save_plan(tmp_path,scenario(system='Third'))
+    hp.save_actuals(tmp_path,valid['plan_id'],dict(reviewed=382,issues=11,agreement=.86,notes=''))
+    broken=hp.save_plan(tmp_path,scenario(system='Broken'))
+    hp.atomic_write(Path(broken['folder'])/'actuals_v1.json','{')
+    damaged=(Path(broken['folder'])/'actuals_v1.json').read_bytes()
+    rows=client.get('/api/plans').json
+    normal=next(r for r in rows if r['system']=='Valid')
+    assert normal['warnings']==['W2','W9']
+    assert normal['actuals']['outputs']['display']['observed_rate']=='2.9%'
+    assert next(r for r in rows if r['plan_id']==broken['plan_id'])['unreadable']
+    assert 'Broken' not in client.get('/api/systems').json
+    assert client.get('/api/prefill?system=broken').json=={}
+    rebuilt=client.get('/api/log/rebuild').json
+    assert rebuilt['rows']==3
+    with Path(rebuilt['path']).open(encoding='utf-8-sig',newline='') as stream:
+        log=next(r for r in csv.DictReader(stream) if r['system']=='Valid')
+    assert float(log['hours'])==normal['hours'] and int(log['n_headline'])==normal['n_headline']
+    assert log['warnings']==';'.join(normal['warnings'])
+    assert (Path(broken['folder'])/'actuals_v1.json').read_bytes()==damaged
+
+
 def test_csv_log_exact_schema_roundtrip_rebuild_and_failure(tmp_path,monkeypatch,capsys):
     import csv
     columns='plan_id,period_type,period_label,system,plan_version,saved_at,N,confidence,margin_mode,margin_input,E_effective,p,p_source,certify,threshold,smes,hours_per_sme,minutes_per_conversation,dr_share,dr_floor,n_cochran,n_assure,n_headline,binding,dr_count,reviews,hours,capacity,verdict,n_max_at_capacity,margin_at_capacity,threshold_at_capacity,detection_power,warnings,actuals_version,recorded_at,reviewed,issues,observed_rate,achieved_margin,certify_status,agreement,notes'.split(',')

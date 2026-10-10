@@ -143,10 +143,10 @@ Each session row should be ticked **only after** all six gates and the row-speci
     - [x] Case-insensitive saved systems datalist/prefill.
     - [x] Observed-rate source and zero-rate 0.1% floor.
     - [x] N blank, period reset, manual field edits preserved.
-- [ ] **29 — History consistency and corrupt-file handling.** History, log, and prefill consistently reflect readable source records without silent data loss. Spec §7.3, §8.5, §10 E4, §11.3. Prompt: `prompts/29_history_consistency_and_corrupt_file_handling.md` — Merged commit/PR: `________`
-    - [ ] Unreadable folders visible but never altered.
-    - [ ] History/CSV/Prefill agree on readable records.
-    - [ ] Corrupt/latest actuals excluded and recovery possible.
+- [x] **29 — History consistency and corrupt-file handling.** History, log, and prefill consistently reflect readable source records without silent data loss. Spec §7.3, §8.5, §10 E4, §11.3. Prompt: `prompts/29_history_consistency_and_corrupt_file_handling.md` — Merged commit/PR: `________`
+    - [x] Unreadable folders visible but never altered.
+    - [x] History/CSV/Prefill agree on readable records.
+    - [x] Corrupt/latest actuals excluded and recovery possible.
 
 ### Actuals
 
@@ -169,36 +169,36 @@ Each session row should be ticked **only after** all six gates and the row-speci
 
 ### Method
 
-- [ ] **30 — Method API and live educational tab.** Auditor can reproduce the output and read assumptions directly from UI. Spec §7.4, §9 GET /api/method, §4.1–4.3. Prompt: `prompts/30_method_api_and_live_educational_tab.md` — Merged commit/PR: `________`
-    - [ ] Method F1–F10/Z table, assumptions and references.
-    - [ ] Live arithmetic equals Plan headline results.
-    - [ ] No false 11/11 passed before actual selftest.
+- [x] **30 — Method API and live educational tab.** Auditor can reproduce the output and read assumptions directly from UI. Spec §7.4, §9 GET /api/method, §4.1–4.3. Prompt: `prompts/30_method_api_and_live_educational_tab.md` — Merged commit/PR: `________`
+    - [x] Method F1–F10/Z table, assumptions and references.
+    - [x] Live arithmetic equals Plan headline results.
+    - [x] No false 11/11 passed before actual selftest.
 
 ### Safety
 
-- [ ] **31 — Immutable answer key and startup gate.** Statistical integrity becomes an enforceable runtime gate, not a cosmetic label. Spec §2.3 --selftest, §7.5, §11.1, §11.5, §10 E8. Prompt: `prompts/31_immutable_answer_key_and_startup_gate.md` — Merged commit/PR: `________`
-    - [ ] K1–K11 selftest prints 11 PASS + exit0.
-    - [ ] Injected broken constant fails and names cases.
-    - [ ] Startup failure blocks save at API and UI levels.
-- [ ] **32 — Failures, workspace health, and JSON error resilience.** All required failure modes have deterministic recoverable responses. Spec §8.6–8.7, §10 E1–E10, §9. Prompt: `prompts/32_failures_workspace_health_and_json_error_resilience.md` — Merged commit/PR: `________`
-    - [ ] E1–E10 failures have correct response paths.
-    - [ ] Workspace failure health/banner and recovery.
-    - [ ] 500 hides stack traces; temp files cleaned.
-- [ ] **33 — Multi-tab consistency, race safety and launcher regression.** The specified single-user, multi-tab usage cannot silently destroy saved work. Spec §2.3, §3.1, §4.8, §8.7, §10 E5/E6. Prompt: `prompts/33_multi_tab_consistency_race_safety_and_launcher_regression.md` — Merged commit/PR: `________`
-    - [ ] Concurrent versions never overwrite old files.
-    - [ ] Port conflict/reuse and Quit regression passes.
-    - [ ] Two tabs calculate independently without stale globals.
+- [x] **31 — Immutable answer key and startup gate.** Statistical integrity becomes an enforceable runtime gate, not a cosmetic label. Spec §2.3 --selftest, §7.5, §11.1, §11.5, §10 E8. Prompt: `prompts/31_immutable_answer_key_and_startup_gate.md` — Merged commit/PR: `________`
+    - [x] K1–K11 selftest prints 11 PASS + exit0.
+    - [x] Injected broken constant fails and names cases.
+    - [x] Startup failure blocks save at API and UI levels.
+- [x] **32 — Failures, workspace health, and JSON error resilience.** All required failure modes have deterministic recoverable responses. Spec §8.6–8.7, §10 E1–E10, §9. Prompt: `prompts/32_failures_workspace_health_and_json_error_resilience.md` — Merged commit/PR: `________`
+    - [x] E1–E10 failures have correct response paths.
+    - [x] Workspace failure health/banner and recovery.
+    - [x] 500 hides stack traces; temp files cleaned.
+- [x] **33 — Multi-tab consistency, race safety and launcher regression.** The specified single-user, multi-tab usage cannot silently destroy saved work. Spec §2.3, §3.1, §4.8, §8.7, §10 E5/E6. Prompt: `prompts/33_multi_tab_consistency_race_safety_and_launcher_regression.md` — Merged commit/PR: `________`
+    - [x] Concurrent versions never overwrite old files.
+    - [x] Port conflict/reuse and Quit regression passes.
+    - [x] Two tabs calculate independently without stale globals.
 
 ### Quality
 
-- [ ] **34 — Offline desktop fit, polish, and accessibility.** User-facing experience is stable, offline, understandable and faithful to spec. Spec §2.1, §7.1–7.4, §10. Prompt: `prompts/34_offline_desktop_fit_polish_and_accessibility.md` — Merged commit/PR: `________`
-    - [ ] Desktop light cards, four tabs, Quit and focus states.
-    - [ ] No external CSS/JS/URL/CDN and keyboard smoke.
-    - [ ] Report print, labels/tooltips, error states clear.
-- [ ] **35 — Full automated integration and contract audit.** Every stated test category has explicit passing evidence, with no skipped mandatory contract tests. Spec §11.1–11.5, §4–10. Prompt: `prompts/35_full_automated_integration_and_contract_audit.md` — Merged commit/PR: `________`
-    - [ ] Entire Plan→Actuals→History→CSV→Method chain tested.
-    - [ ] All I/F/K/W/S and 15 endpoints covered.
-    - [ ] pytest/selftest green with isolated test workspaces.
+- [x] **34 — Offline desktop fit, polish, and accessibility.** User-facing experience is stable, offline, understandable and faithful to spec. Spec §2.1, §7.1–7.4, §10. Prompt: `prompts/34_offline_desktop_fit_polish_and_accessibility.md` — Merged commit/PR: `________`
+    - [x] Desktop light cards, four tabs, Quit and focus states.
+    - [x] No external CSS/JS/URL/CDN and keyboard smoke.
+    - [ ] Owner print-to-PDF preview remains pending; labels/tooltips/error states and print CSS verified.
+- [x] **35 — Full automated integration and contract audit.** Every stated test category has explicit passing evidence, with no skipped mandatory contract tests. Spec §11.1–11.5, §4–10. Prompt: `prompts/35_full_automated_integration_and_contract_audit.md` — Merged commit/PR: `________`
+    - [x] Entire Plan→Actuals→History→CSV→Method chain tested.
+    - [x] All I/F/K/W/S and 15 endpoints covered.
+    - [x] pytest/selftest green with isolated test workspaces.
 
 ### Release
 
@@ -209,23 +209,23 @@ Each session row should be ticked **only after** all six gates and the row-speci
 
 ## 2. Final contract gates
 
-- [ ] All **11** answer-key cases K1–K11 pass exactly, with Z constants 1.645, 1.960, 2.576.
-- [ ] F1–F10 are independently tested (including reverse mode and n_max=0), no browser calculation duplicates.
-- [ ] W1–W10 each have in/out boundary tests; W7 remains saveable but does not make a false certify claim.
-- [ ] Exactly seven S1–S7 generated for absolute, relative and all certification states.
-- [ ] I1–I15 validated with out-of-range errors; N and team facts are not guessed.
-- [ ] All 15 endpoints from §9 tested for success/error (enumerate in `TRACEABILITY.md`).
-- [ ] plan_vN.json and actuals_vN.json immutable; report.html and plans_log.csv regenerated atomically.
-- [ ] Corrupt JSON leaves a non-destructive unreadable History row and is excluded from log/prefill.
-- [ ] Offline behavior verified and bound to 127.0.0.1 only; local file opening handles failures.
-- [ ] Startup 11/11 integrity check gates Save/Record in backend and UI.
-- [ ] Desktop Plan, Actuals, History, Method and Quit all exercised.
+- [x] All **11** answer-key cases K1–K11 pass exactly, with Z constants 1.645, 1.960, 2.576.
+- [x] F1–F10 are independently tested (including reverse mode and n_max=0), no browser calculation duplicates.
+- [x] W1–W10 each have in/out boundary tests; W7 remains saveable but does not make a false certify claim.
+- [x] Exactly seven S1–S7 generated for absolute, relative and all certification states.
+- [x] I1–I15 validated with out-of-range errors; N and team facts are not guessed.
+- [x] All 15 endpoints from §9 tested for success/error (enumerate in `TRACEABILITY.md`).
+- [x] plan_vN.json and actuals_vN.json immutable; report.html and plans_log.csv regenerated atomically.
+- [x] Corrupt JSON leaves a non-destructive unreadable History row and is excluded from log/prefill.
+- [x] Offline behavior verified and bound to 127.0.0.1 only; local file opening handles failures.
+- [x] Startup 11/11 integrity check gates Save/Record in backend and UI.
+- [x] Desktop Plan, Actuals, History, Method and Quit all exercised.
 - [ ] Acceptance checklist in `ACCEPTANCE.md` completed with notes/evidence.
 - [ ] Port collision check marked **verified**, with any adjustment documented.
 - [ ] README commands and Windows launch steps checked on target machine.
-- [ ] End-to-end `python -m pytest -q` succeeds.
-- [ ] `python hitl_planner.py --selftest` gives 11 PASS and exit code 0.
-- [ ] Check no v2 features or conversation-content ingestion were introduced.
+- [x] End-to-end `python -m pytest -q` succeeds.
+- [x] `python hitl_planner.py --selftest` gives 11 PASS and exit code 0.
+- [x] Check no v2 features or conversation-content ingestion were introduced.
 - [ ] Owner approves release; tag `v1.0.0` only afterward.
 
 ## 3. Risks / observations log
@@ -235,7 +235,7 @@ Each session row should be ticked **only after** all six gates and the row-speci
 | 2026-10-08 | 00 | Port 5062 requires comparison with existing Pareto/IMR tool scripts, which were not attached. | Confirm on Windows before launch. |
 | 2026-10-08 | 00 | External code-generation agent may not have PDF-reading support. | Supply its readable PDF or extracted text without altering the source contract. |
 
-**Progress:** 28 / 36 implementation tasks completed in this supplied planning kit. The checklist is not evidence of implemented or tested code.
+**Progress:** 35 / 36 implementation tasks completed with local test evidence. Task36 release acceptance remains open.
 
 ## Codex task review gate (repeat before checking off any row)
 
@@ -310,3 +310,17 @@ Each session row should be ticked **only after** all six gates and the row-speci
 - Task 26 commit: f65a283. Task 27 RED: missing Actuals controls. GREEN: 148 passed; browser acceptance382/11/86 ->2.9%/1.7%/W9, saved read-only v1; Record again, reviewed50001 disables save; zero issues/79% agreement saved v2 with0.78% bound/met/W9/W10; planned summary unchanged.
 
 - Task 27 commit: faa3576. Task 28 RED: no generated CSV. GREEN: 149 passed; exact43 columns/BOM, latest-plan/latest-actual rows, original multiline Unicode notes preserved (fixed Windows newline translation), deterministic sorting/idempotent rebuild, corrupt skip, CSV-locked partial save keeps JSON and retry rebuild succeeds. New floor-warning fixture corrected to N40; expected contract unchanged.
+
+- Task 28 commit: 3c11d68. Task 29 RED: History omitted actuals W9. GREEN: 150 passed; History/CSV numerical fields and combined warning codes agree, corrupt actuals remain byte-identical and actionless/omitted from suggestions/prefill/log, derived failure notice persists across tabs.
+
+- Task 29 commit: 4e55ae3. Task 30 RED: missing Method API404. GREEN: 151 passed; exact constants, all formulas, real11/11, six assumptions/references and versions. Windows browser382/58/88h trace, edited H10 updates capacity30h in live Method; presentation ordered F1-F10 and Z1.960.
+
+- Task 30 commit: f4feabe. Task 31 RED: --selftest launched instead of exiting (10s timeout). GREEN: 152 passed; subprocess11PASS exit0 and no cwd files, deliberate Z fault producesFAIL K1/exit1, real cached startup status/all-tab banner, server Plan/Actuals503 and UI disabled, old bytes untouched and calc still available. Manual selftest all11PASS.
+
+- Task 31 commit: 86c7676. Task 32 RED: non-JSON404 and invalid saved sample accepted. GREEN: 154 passed +11PASS selftest; 400/404/500JSON, red workspace banner/503/recovery and calc availability, exception details without traceback, typed/offset saved records, config bool-schema rejected without rewriting, prior atomic failure tests retained.
+
+- Task 32 commit: 26c01ee. Task 33 new regression already GREEN using existing workspace synchronization: concurrent A/B and A:B get two distinct folders and v1/v2 each; concurrent Actuals v1/v2, original checksums stable, calc state isolated and no lock/tmp residue. Full155 passed +11PASS; existing launcher reuse/foreign/free/Quit/Ctrl-C checks pass. No speculative locking code added.
+
+- Task 33 commit: 1ae6097. Task 34 RED: missing tab/panel accessibility roles. GREEN:156 passed +11PASS; actual Pareto Segoe UI CSS inspected, accessible tabs/Arrow/Home/End navigation, visible keyboard focus/tooltips, no remote assets, 1280px browser History scrollWidth1280/clientWidth1280 and Plan1265/1265 (no page overflow). Screenshot visually inspected; viewport restored. Native Print-to-PDF/Excel owner check remains pending.
+
+- Task 34 commit: 7d8fbd2. Task35 lifecycle regression initially GREEN with existing services; added explicit CSV rebuild-failure and all-issue prefill boundary. Full158 passed (no skips), 11PASS/exit0 selftest and py_compile. TRACEABILITY maps every I/F/K/W/S/API/E category to passing tests. Fresh Python3.11 environment independently passes158 and11PASS. Excluded features audited absent.

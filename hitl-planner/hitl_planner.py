@@ -49,11 +49,24 @@ CSV_COLUMNS = ('plan_id,period_type,period_label,system,plan_version,saved_at,N,
                'reviews,hours,capacity,verdict,n_max_at_capacity,margin_at_capacity,threshold_at_capacity,'
                'detection_power,warnings,actuals_version,recorded_at,reviewed,issues,observed_rate,'
                'achieved_margin,certify_status,agreement,notes').split(',')
+ASSUMPTIONS = [
+    'Conversations are selected at random from all N.',
+    'Each conversation is scored simply "issue / no issue".',
+    'p = 50% is the worst case for sample size.',
+    'The "below T" claim requires zero issues found in the sample.',
+    'Detection power ignores the finite-population adjustment, which is negligible when n is small against N.',
+    'SME time is uniform across SMEs.',
+]
+FORMULA_TERMS = ('N: population; C: confidence; Z: specified confidence constant; p: expected issue rate; '
+                 'E: absolute margin; r: relative margin; n0: uncorrected sample; n: headline sample; '
+                 'T: certify threshold; s: double-review share; F: double-review floor; DR: double reviews; '
+                 'S: SMEs; H: hours per SME; M: minutes per review; P: detection power. '
+                 'ceil_safe(x) = ceil(round(x, 9)); fits(hours, capacity) uses tolerance 1e-9.')
 CONFIG_PATH = Path(__file__).resolve().with_name('config.json')
 PAGE_HTML = r'''<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>HITL Sample Size Planner</title>
 <style>
-*{box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#f4f6f8;color:#18253a;margin:0;padding:24px}
+*{box-sizing:border-box}body{font-family:"Segoe UI",system-ui,sans-serif;background:#f4f6f8;color:#18253a;margin:0;padding:24px}
 main{max-width:1440px;margin:auto}h1{font-size:25px;margin:0 0 18px}h2{font-size:18px}h3{font-size:15px;margin:0 0 14px}
 nav{display:flex;gap:8px;margin-bottom:18px}button{font:inherit;border:1px solid #bcc9d7;background:white;border-radius:6px;padding:9px 15px;cursor:pointer}
 button.active{background:#183f69;color:white}button:disabled{opacity:.45;cursor:default}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #72a5d5;outline-offset:2px}
@@ -63,10 +76,13 @@ input,select,textarea{font:inherit;width:100%;border:1px solid #aab8c9;border-ra
 .invalid{border-color:#bb3434;background:#fff9f9}.error{display:block;color:#ac2626;font-size:12px;margin-top:4px}.note{font-size:12px;color:#59687c}.muted{opacity:.45}small.tag{border:1px solid #d4deea;padding:2px 6px;border-radius:4px}
 [hidden]{display:none!important}.segmented{display:flex;gap:4px}.segmented label{border:1px solid #c9d3df;padding:7px;border-radius:5px}.segmented input{width:auto}
 #global-notices{margin-bottom:12px} .placeholder{color:#657389;padding:26px}.warning{border-left:4px solid #c6901c;background:#fff8de;padding:12px;margin-bottom:10px}.warning.red{border-color:#bf3333;background:#ffebeb}.badge{display:inline-block;padding:5px 10px;border-radius:5px;font-size:13px;font-weight:700}.badge.green{background:#e2f5e9;color:#146c40}.badge.red{background:#ffe5e5;color:#9c2525}li{margin:10px 0;line-height:1.5}table{width:100%;border-collapse:separate;border-spacing:5px;font-size:13px}th,td{text-align:left;padding:10px}td.green{background:#e2f5e9}td.red{background:#ffe5e5}td.selected{outline:2px solid #244c78;border-radius:3px}#assurance-card.red{border-color:#bf3333;background:#fff4f4}
+.card{min-width:0}th,td{overflow-wrap:anywhere}#history-table{table-layout:fixed}#history-table button{padding:7px;margin:2px 0;max-width:100%}nav [role=tablist]{display:flex;gap:8px}nav{align-items:center}#actuals-summary,#actuals-existing{overflow-wrap:anywhere}form h3{font-size:18px}textarea{resize:vertical}@media(max-width:1050px){.columns{grid-template-columns:1fr}body{padding:16px}}@media print{nav,button,form{display:none}body{background:white;padding:0}.card{break-inside:avoid}h2,h3{break-after:avoid}}
 </style></head><body><main><h1>HITL Sample Size Planner</h1>
-<nav aria-label="Planner tabs"><button class="active" data-tab="plan">Plan</button><button data-tab="actuals">Actuals</button><button data-tab="history">History</button><button data-tab="method">Method</button><button id="quit">Quit</button></nav>
+<nav aria-label="Planner navigation"><div role="tablist" aria-label="Planner tabs"><button id="plan-nav" role="tab" aria-selected="true" aria-controls="plan-tab" class="active" data-tab="plan">Plan</button><button id="actuals-nav" role="tab" aria-selected="false" aria-controls="actuals-tab" data-tab="actuals">Actuals</button><button id="history-nav" role="tab" aria-selected="false" aria-controls="history-tab" data-tab="history">History</button><button id="method-nav" role="tab" aria-selected="false" aria-controls="method-tab" data-tab="method">Method</button></div><button id="quit">Quit</button></nav>
 <div id="global-notices" role="alert"></div>
-<section id="plan-tab"><div class="columns"><form id="plan-form" novalidate>
+{% if not integrity_ok %}<div id="integrity-banner" class="warning red" role="alert">Answer key failed: cases {{ failed_cases|join(', ') }}. Results cannot be trusted; saving is disabled.</div>{% endif %}
+<div id="workspace-banner" class="warning red" role="alert" {% if workspace_ok %}hidden{% endif %}>{{ workspace_error or '' }}</div>
+<section id="plan-tab" role="tabpanel" aria-labelledby="plan-nav"><div class="columns"><form id="plan-form" novalidate>
 <div class="card"><h3>Identity</h3><div class="fields">
 <div class="wide"><label>Period type</label><div class="segmented" id="period_type"><label><input type="radio" name="period_type" value="month" checked> Month</label><label><input type="radio" name="period_type" value="week"> Week</label></div></div>
 <div class="wide"><label for="period_label">Period</label><input type="month" id="period_label" required></div>
@@ -99,19 +115,21 @@ input,select,textarea{font:inherit;width:100%;border:1px solid #aab8c9;border-ra
 <div class="card"><h2>What this sample can and can't say</h2><h3>Can say</h3><ol id="can-say"></ol><h3>Can't say</h3><ol id="cannot-say" start="4"></ol></div></div>
 </div><button id="save-plan" disabled>Save plan</button><div id="save-toast" role="status"></div></div>
 </div></section>
-<section id="actuals-tab" hidden><div class="card"><label for="actuals-plan">Saved plan</label><select id="actuals-plan"><option value="">Choose a saved plan</option></select><div id="actuals-summary"></div><div id="actuals-existing" hidden></div><button id="record-again" hidden>Record again</button></div>
+<section id="actuals-tab" role="tabpanel" aria-labelledby="actuals-nav" hidden><div class="card"><label for="actuals-plan">Saved plan</label><select id="actuals-plan"><option value="">Choose a saved plan</option></select><div id="actuals-summary">Actuals are not yet available for an unselected plan. Choose a saved plan.</div><div id="actuals-existing" hidden></div><button id="record-again" hidden>Record again</button></div>
 <form id="actuals-form" class="card" hidden novalidate><div class="fields"><div><label for="reviewed">Conversations reviewed</label><input id="reviewed" type="number" min="1" step="1"></div><div><label for="issues">Conversations with issues</label><input id="issues" type="number" min="0" step="1"></div><div><label for="agreement">Double-review agreement (%)</label><input id="agreement" type="number" min="0" max="100" step="any"></div><div class="wide"><label for="notes">Notes</label><textarea id="notes" rows="4"></textarea></div></div><p class="note">Record review totals and process notes. Do not enter conversation contents.</p></form>
 <div id="actuals-results" class="card" hidden></div><button id="record-actuals" disabled hidden>Record actuals</button><div id="actuals-toast" role="status"></div></section>
-<section id="history-tab" hidden><div class="card"><label for="history-filter">Filter by system</label><input id="history-filter" type="search"><div id="history-notice" role="status"></div><table id="history-table"></table></div></section>
-<section id="method-tab" hidden><div class="card">Method view is not yet available.</div></section>
+<section id="history-tab" role="tabpanel" aria-labelledby="history-nav" hidden><div class="card"><label for="history-filter">Filter by system</label><input id="history-filter" type="search"><div id="history-notice" role="status"></div><table id="history-table"></table></div></section>
+<section id="method-tab" role="tabpanel" aria-labelledby="method-nav" hidden><div class="card"><h2>Method</h2><p id="method-integrity"></p><p id="method-version"></p><div id="method-constants"></div><div id="method-formulas"></div><p id="method-terms"></p><h3>Assumptions</h3><ol id="method-assumptions"></ol></div><div class="card"><h2>This plan's arithmetic</h2><ol id="method-arithmetic" class="muted"><li>Complete the Plan inputs to see the arithmetic.</li></ol></div><div class="card"><h2>References</h2><ol id="method-references"></ol></div></section>
 </main><script>
 const initial={{ initial|tojson }};
+const integrityOK={{ integrity_ok|tojson }};
+let workspaceOK={{ workspace_ok|tojson }};
 const $=id=>document.getElementById(id);
 const numeric=['N','confidence','margin_input','p','smes','hours_per_sme','minutes_per_conversation','dr_share','dr_floor','threshold'];
 const percentages=new Set(['margin_input','p','dr_share','threshold']);
 let pSource='default',timer,requestCounter=0,controller,currentResult=null;
 function formInputs(){const data={};for(const id of numeric){const raw=$(id).value;data[id]=raw===''?null:Number(raw)/(percentages.has(id)?100:1);}data.period_type=document.querySelector('input[name=period_type]:checked').value;data.margin_mode=document.querySelector('input[name=margin_mode]:checked').value;data.period_label=$('period_label').value;data.system=$('system').value;data.certify=$('certify').checked;data.p_source=pSource;return data;}
-function invalidate(){currentResult=null;$('results').classList.add('muted');$('results').dataset.valid='false';$('save-plan').disabled=true;$('result-placeholder').hidden=false;}
+function invalidate(){currentResult=null;$('results').classList.add('muted');$('results').dataset.valid='false';$('save-plan').disabled=true;$('result-placeholder').hidden=false;$('method-arithmetic').classList.add('muted');}
 function showErrors(errors){for(const field of $('plan-form').querySelectorAll('.invalid'))field.classList.remove('invalid');for(const message of $('plan-form').querySelectorAll('.error'))message.remove();for(const [id,message] of Object.entries(errors)){const field=$(id);if(field){field.classList.add('invalid');const span=document.createElement('span');span.className='error';span.textContent=message;field.after(span);}}}
 function textElement(tag,text,className=''){const element=document.createElement(tag);element.textContent=text;element.className=className;return element;}
 function paintResult(data){currentResult=data;const o=data.outputs;$('results').classList.remove('muted');$('results').dataset.valid='true';$('result-placeholder').hidden=true;$('plan-output').hidden=false;$('headline').textContent=o.display.headline;$('reviews-subline').textContent=o.display.reviews_subline;$('binding').textContent=o.display.binding;$('verdict').textContent=o.verdict;$('verdict').className='badge '+(o.verdict==='FITS'?'green':'red');$('warnings').replaceChildren(...data.warnings.map(w=>textElement('div',w.message,'warning '+w.severity)));$('can-say').replaceChildren(...data.statements.slice(0,3).map(s=>textElement('li',s)));$('cannot-say').replaceChildren(...data.statements.slice(3).map(s=>textElement('li',s)));paintTradeoff(o);paintSensitivity(o);}
@@ -125,14 +143,14 @@ async function performCalculation(ticket){controller=new AbortController();try{c
 function queueCalculation(){clearTimeout(timer);invalidate();requestCounter++;controller?.abort();const ticket=requestCounter;timer=setTimeout(()=>performCalculation(ticket),150);}
 let saving=false;
 async function openSaved(kind,planId,target){try{const response=await fetch('/api/open-'+kind,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan_id:planId})});const data=await response.json();if(!response.ok||!data.ok){target.className='warning';target.append(textElement('p','Could not open automatically. Open this path: '+(data.path||data.error||planId)));}}catch(error){target.append(textElement('p','Opening unavailable. Check the local planner.'));}}
-$('save-plan').onclick=async()=>{if(!currentResult||saving)return;saving=true;$('save-plan').disabled=true;const snapshot=formInputs();try{const response=await fetch('/api/plans',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(snapshot)});const data=await response.json();if(!response.ok){if(data.errors)showErrors(data.errors);$('save-toast').className='warning';$('save-toast').textContent=data.error||'Plan could not be saved. Check the highlighted inputs.';return;}const toast=$('save-toast');toast.className='card';toast.replaceChildren(textElement('p','Saved '+data.plan_id+' · version '+data.version));for(const kind of ['report','folder']){const button=textElement('button','Open '+kind);button.onclick=()=>openSaved(kind,data.plan_id,toast);toast.append(button);}}catch(error){$('save-toast').textContent='Save unavailable. Check the local planner.';}finally{saving=false;$('save-plan').disabled=!currentResult;}};
-const paintCalculated=paintResult;paintResult=data=>{paintCalculated(data);if(!saving)$('save-plan').disabled=false;};
+$('save-plan').onclick=async()=>{if(!currentResult||saving||!integrityOK||!workspaceOK)return;saving=true;$('save-plan').disabled=true;const snapshot=formInputs();try{const response=await fetch('/api/plans',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(snapshot)});const data=await response.json();if(!response.ok){if(data.errors)showErrors(data.errors);$('save-toast').className='warning';$('save-toast').textContent=data.error||'Plan could not be saved. Check the highlighted inputs.';if(response.status===503){workspaceOK=false;$('workspace-banner').hidden=false;$('workspace-banner').textContent=data.error||'Workspace unavailable.';}if(data.error)$('global-notices').replaceChildren(textElement('div',data.error,'warning'));return;}const toast=$('save-toast');toast.className='card';toast.replaceChildren(textElement('p','Saved '+data.plan_id+' · version '+data.version));for(const kind of ['report','folder']){const button=textElement('button','Open '+kind);button.onclick=()=>openSaved(kind,data.plan_id,toast);toast.append(button);}}catch(error){$('save-toast').textContent='Save unavailable. Check the local planner.';}finally{saving=false;$('save-plan').disabled=!currentResult||!integrityOK||!workspaceOK;}};
+const paintCalculated=paintResult;paintResult=data=>{paintCalculated(data);paintMethodArithmetic(data.arithmetic);if(!saving&&integrityOK&&workspaceOK)$('save-plan').disabled=false;};
 function setMarginMode(){const mode=document.querySelector('input[name=margin_mode]:checked').value;const values=mode==='absolute'?[3,5,10]:[10,25,50];$('margin_preset').replaceChildren(...values.map(value=>new Option('±'+value+'%',String(value))),new Option('Custom','custom'));$('margin_preset').value='custom';$('custom-margin').hidden=false;}
 for(const id of numeric){const value=initial[id];$(id).value=value==null?'':String(value*(percentages.has(id)?100:1));}$('period_label').value=initial.period_label;
 $('plan-form').addEventListener('submit',event=>event.preventDefault());
 $('plan-form').addEventListener('input',event=>{if(event.target.id==='p'){pSource='manual';$('p-source').textContent=pSource;}queueCalculation();});
 $('plan-form').addEventListener('change',event=>{if(event.target.name==='period_type'){const period=event.target.value;$('period_label').type=period==='month'?'month':'week';$('period_label').value=period==='month'?initial.period_label:{{ current_week|tojson }};$('hours-label').textContent='Hours per SME this '+period;}if(event.target.name==='margin_mode')setMarginMode();if(event.target.id==='margin_preset'){const custom=event.target.value==='custom';$('custom-margin').hidden=!custom;if(!custom)$('margin_input').value=event.target.value;}queueCalculation();});
-for(const tab of document.querySelectorAll('[data-tab]'))tab.onclick=()=>{for(const other of document.querySelectorAll('[data-tab]')){other.classList.toggle('active',other===tab);$(other.dataset.tab+'-tab').hidden=other!==tab;}};
+for(const tab of document.querySelectorAll('[data-tab]'))tab.onclick=()=>{for(const other of document.querySelectorAll('[data-tab]')){other.classList.toggle('active',other===tab);other.setAttribute('aria-selected',String(other===tab));$(other.dataset.tab+'-tab').hidden=other!==tab;}};
 let historyRows=[];
 function applyPlanInputs(data){for(const id of numeric){const value=data[id];$(id).value=value==null?'':String(value*(percentages.has(id)?100:1));}for(const name of ['period_type','margin_mode'])for(const radio of document.querySelectorAll('input[name='+name+']'))radio.checked=radio.value===data[name];$('period_label').type=data.period_type==='month'?'month':'week';$('period_label').value=data.period_label;$('system').value=data.system;$('certify').checked=data.certify;$('hours-label').textContent='Hours per SME this '+data.period_type;setMarginMode();const margin=String(data.margin_input*100);if([...$('margin_preset').options].some(o=>o.value===margin)){$('margin_preset').value=margin;$('custom-margin').hidden=true;}pSource=data.p_source;$('p-source').textContent=pSource;queueCalculation();}
 async function loadSavedPlan(planId){try{const response=await fetch('/api/plans/'+encodeURIComponent(planId));const data=await response.json();if(!response.ok)throw new Error(data.error||'Saved plan unavailable.');const p=data.plan;applyPlanInputs({...p.inputs,period_type:p.plan.period_type,period_label:p.plan.period_label,system:p.plan.system});document.querySelector('[data-tab=plan]').click();$('prefill-banner').hidden=false;$('prefill-banner').textContent='Loaded '+p.plan.plan_id+' · version '+p.plan.version;}catch(error){$('history-notice').textContent=error.message;}}
@@ -144,17 +162,22 @@ const baseFormInputs=formInputs;formInputs=()=>({...baseFormInputs(),prefilled_f
 async function refreshSystems(){try{const response=await fetch('/api/systems');if(response.ok)$('systems').replaceChildren(...(await response.json()).map(s=>new Option(s,s)));}catch(error){}}
 function queuePrefill(){clearTimeout(prefillTimer);const ticket=++prefillTicket;prefilledFrom=null;const system=$('system').value;const snapshot=formInputs();prefillTimer=setTimeout(async()=>{try{const response=await fetch('/api/prefill?system='+encodeURIComponent(system));const data=await response.json();if(ticket!==prefillTicket||$('system').value!==system||!data.inputs)return;const current=formInputs(),merged={...current};for(const [key,value] of Object.entries(data.inputs)){if(key==='system'||key==='N'||key==='prefilled_from'||key==='p_source')continue;if(current[key]===snapshot[key])merged[key]=value;}merged.N=current.N;if(current.p===snapshot.p)merged.p_source=data.p_source;applyPlanInputs(merged);prefilledFrom=data.prefilled_from;$('prefill-banner').hidden=false;$('prefill-banner').textContent='Prefilled from '+data.prefilled_from+(data.actuals_recorded_at?' · p from actuals recorded '+data.actuals_recorded_at.slice(0,10):'');}catch(error){$('prefill-banner').hidden=false;$('prefill-banner').textContent='Previous settings could not be loaded.';}},150);}
 $('system').addEventListener('input',queuePrefill);refreshSystems();
+function paintMethodArithmetic(lines){$('method-arithmetic').replaceChildren(...lines.map(line=>textElement('li',line)));$('method-arithmetic').classList.remove('muted');}
+async function refreshMethod(){try{const response=await fetch('/api/method');const data=await response.json();if(!response.ok)throw new Error(data.error||'Method unavailable.');$('method-integrity').textContent='Answer key: '+data.integrity_check.passed+'/'+data.integrity_check.total+' passed';$('method-version').textContent='Method version '+data.method_version+' (27 Sep 2026) · Tool version '+data.tool_version;$('method-constants').replaceChildren(textElement('h3','Exact constants'),...Object.entries(data.constants.Z).map(([confidence,z])=>textElement('p','Z['+confidence+'] = '+z.toFixed(3))));$('method-formulas').replaceChildren(...Object.entries(data.formulas).sort((a,b)=>Number(a[0].slice(1))-Number(b[0].slice(1))).map(([id,formula])=>textElement('p',id+': '+formula)));$('method-terms').textContent=data.terms;$('method-assumptions').replaceChildren(...data.assumptions.map(s=>textElement('li',s)));$('method-references').replaceChildren(...data.references.map(s=>textElement('li',s)));if(currentResult)paintMethodArithmetic(currentResult.arithmetic);}catch(error){$('method-integrity').textContent=error.message;}}
+document.querySelector('[data-tab=method]').addEventListener('click',refreshMethod);
+for(const tab of document.querySelectorAll('[data-tab]'))tab.addEventListener('keydown',event=>{const tabs=[...document.querySelectorAll('[data-tab]')],index=tabs.indexOf(tab);let next;if(event.key==='ArrowRight')next=(index+1)%tabs.length;if(event.key==='ArrowLeft')next=(index+tabs.length-1)%tabs.length;if(event.key==='Home')next=0;if(event.key==='End')next=tabs.length-1;if(next!==undefined){event.preventDefault();tabs[next].focus();tabs[next].click();}});
 let selectedActualPlan=null,actualsTicket=0,actualsSelection=0,actualsTimer,actualsController,actualsValid=false,recordingActuals=false;
 function actualsInputs(){const data={plan_id:selectedActualPlan?.plan.plan_id,plan_version:selectedActualPlan?.plan.version,notes:$('notes').value};for(const field of ['reviewed','issues','agreement'])data[field]=$(field).value===''?null:Number($(field).value)/(field==='agreement'?100:1);return data;}
 function actualsErrors(errors){for(const e of $('actuals-form').querySelectorAll('.error'))e.remove();for(const e of $('actuals-form').querySelectorAll('.invalid'))e.classList.remove('invalid');for(const [field,message] of Object.entries(errors)){if(!['reviewed','issues','agreement','notes'].includes(field))continue;$(field).classList.add('invalid');$(field).after(textElement('span',message,'error'));}}
 function paintActuals(data,target){const o=data.outputs;target.hidden=false;target.replaceChildren(textElement('h2','Review results'),textElement('p','Observed rate: '+o.display.observed_rate),textElement('p',o.display.achieved_margin),textElement('p','Certify: '+o.display.certify_status),textElement('p','Agreement: '+o.display.agreement));const table=document.createElement('table');const heading=document.createElement('tr');heading.append(...['Measure','Planned','Actual'].map(v=>textElement('th',v)));table.append(heading);for(const item of o.display.comparison){const row=document.createElement('tr');row.append(textElement('th',item.label),textElement('td',item.planned),textElement('td',item.actual));table.append(row);}target.append(table,...data.warnings.map(w=>textElement('div',w.message,'warning '+w.severity)));}
-function queueActuals(){clearTimeout(actualsTimer);actualsController?.abort();actualsValid=false;$('record-actuals').disabled=true;$('actuals-results').classList.add('muted');const ticket=++actualsTicket,selection=actualsSelection;actualsTimer=setTimeout(async()=>{if(!selectedActualPlan)return;actualsController=new AbortController();try{const response=await fetch('/api/actuals/calc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(actualsInputs()),signal:actualsController.signal});const data=await response.json();if(ticket!==actualsTicket||selection!==actualsSelection)return;if(!response.ok){actualsErrors(data.errors||{});$('actuals-toast').textContent=data.error||'';return;}actualsErrors({});paintActuals(data,$('actuals-results'));$('actuals-results').classList.remove('muted');actualsValid=true;$('record-actuals').disabled=recordingActuals;}catch(error){if(error.name!=='AbortError')$('actuals-toast').textContent='Calculation unavailable. Check the local planner.';}},150);}
+function queueActuals(){clearTimeout(actualsTimer);actualsController?.abort();actualsValid=false;$('record-actuals').disabled=true;$('actuals-results').classList.add('muted');const ticket=++actualsTicket,selection=actualsSelection;actualsTimer=setTimeout(async()=>{if(!selectedActualPlan)return;actualsController=new AbortController();try{const response=await fetch('/api/actuals/calc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(actualsInputs()),signal:actualsController.signal});const data=await response.json();if(ticket!==actualsTicket||selection!==actualsSelection)return;if(!response.ok){actualsErrors(data.errors||{});$('actuals-toast').textContent=data.error||'';return;}actualsErrors({});paintActuals(data,$('actuals-results'));$('actuals-results').classList.remove('muted');actualsValid=true;$('record-actuals').disabled=recordingActuals||!integrityOK||!workspaceOK;}catch(error){if(error.name!=='AbortError')$('actuals-toast').textContent='Calculation unavailable. Check the local planner.';}},150);}
 async function selectActualPlan(){const ticket=++actualsSelection;actualsTicket++;actualsController?.abort();selectedActualPlan=null;actualsValid=false;for(const id of ['actuals-form','actuals-results','actuals-existing','record-again','record-actuals'])$(id).hidden=true;$('record-actuals').disabled=true;$('actuals-summary').replaceChildren();$('actuals-toast').textContent='';const id=$('actuals-plan').value;if(!id)return;try{const response=await fetch('/api/plans/'+encodeURIComponent(id));const data=await response.json();if(ticket!==actualsSelection)return;if(!response.ok)throw new Error(data.error||'Saved plan unavailable.');selectedActualPlan=data.plan;const p=data.plan,i=p.inputs,o=p.outputs;$('actuals-summary').append(textElement('p',p.plan.plan_id+' · plan version '+p.plan.version),textElement('p',o.display.headline),textElement('p','Planned sample '+o.display.n_headline+' · double reviews '+o.display.dr_count+' · margin '+o.display.E_effective+' · threshold '+o.display.threshold+' · expected rate '+o.display.expected_rate+' · population '+o.display.population));if(data.actuals){const a=data.actuals;paintActuals(a,$('actuals-existing'));$('actuals-existing').prepend(textElement('p','Actuals version '+a.version+' · recorded '+a.recorded_at+' · against plan version '+a.plan_version));$('actuals-existing').append(textElement('p',a.inputs.notes));$('record-again').hidden=false;}else openActualsForm();}catch(error){$('actuals-toast').textContent=error.message;}}
 function openActualsForm(){for(const field of ['reviewed','issues','agreement','notes'])$(field).value='';$('actuals-existing').hidden=true;$('record-again').hidden=true;$('actuals-form').hidden=false;$('record-actuals').hidden=false;$('actuals-results').hidden=true;actualsErrors({});queueActuals();}
 async function refreshActualPlans(){try{const response=await fetch('/api/plans');const data=await response.json();if(!response.ok)throw new Error(data.error||'Saved plans unavailable.');const value=$('actuals-plan').value;data.sort((a,b)=>(b.saved_at||'').localeCompare(a.saved_at||''));$('actuals-plan').replaceChildren(new Option('Choose a saved plan',''),...data.filter(p=>!p.unreadable).map(p=>new Option(p.plan_id+' · v'+p.version+' · '+p.verdict+' · '+p.saved_at,p.plan_id)));if(data.some(p=>p.plan_id===value))$('actuals-plan').value=value;await selectActualPlan();}catch(error){$('actuals-toast').textContent=error.message;}}
 $('actuals-plan').onchange=selectActualPlan;document.querySelector('[data-tab=actuals]').addEventListener('click',refreshActualPlans);$('actuals-form').onsubmit=e=>e.preventDefault();$('actuals-form').oninput=queueActuals;$('record-again').onclick=openActualsForm;
-$('record-actuals').onclick=async()=>{if(!selectedActualPlan||!actualsValid||recordingActuals)return;recordingActuals=true;$('record-actuals').disabled=true;const data=actualsInputs(),selection=actualsSelection;try{const response=await fetch('/api/plans/'+encodeURIComponent(data.plan_id)+'/actuals',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const result=await response.json();if(selection!==actualsSelection)return;if(!response.ok){actualsErrors(result.errors||{});$('actuals-toast').textContent=result.error||'Actuals could not be recorded.';return;}await selectActualPlan();const toast=$('actuals-toast');toast.replaceChildren(textElement('p','Recorded actuals version '+result.version+' for '+data.plan_id));const button=textElement('button','Open report');button.onclick=()=>openSaved('report',data.plan_id,toast);toast.append(button);}catch(error){$('actuals-toast').textContent='Recording unavailable. Check the local planner.';}finally{recordingActuals=false;$('record-actuals').disabled=!actualsValid;}};
+$('record-actuals').onclick=async()=>{if(!selectedActualPlan||!actualsValid||recordingActuals||!integrityOK||!workspaceOK)return;recordingActuals=true;$('record-actuals').disabled=true;const data=actualsInputs(),selection=actualsSelection;try{const response=await fetch('/api/plans/'+encodeURIComponent(data.plan_id)+'/actuals',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const result=await response.json();if(selection!==actualsSelection)return;if(!response.ok){actualsErrors(result.errors||{});$('actuals-toast').textContent=result.error||'Actuals could not be recorded.';if(response.status===503){workspaceOK=false;$('workspace-banner').hidden=false;$('workspace-banner').textContent=result.error||'Workspace unavailable.';}if(result.error)$('global-notices').replaceChildren(textElement('div',result.error,'warning'));return;}await selectActualPlan();const toast=$('actuals-toast');toast.replaceChildren(textElement('p','Recorded actuals version '+result.version+' for '+data.plan_id));const button=textElement('button','Open report');button.onclick=()=>openSaved('report',data.plan_id,toast);toast.append(button);}catch(error){$('actuals-toast').textContent='Recording unavailable. Check the local planner.';}finally{recordingActuals=false;$('record-actuals').disabled=!actualsValid||!integrityOK||!workspaceOK;}};
 $('quit').onclick=async()=>{try{const response=await fetch('/api/quit',{method:'POST'});if(response.ok)document.body.textContent='Planner stopped. You may close this tab.';}catch(error){$('global-notices').textContent='The local planner is unavailable.';}};
+setInterval(async()=>{try{const response=await fetch('/api/health');const health=await response.json();if(!response.ok)return;workspaceOK=health.workspace_ok;$('workspace-banner').hidden=workspaceOK;if(!workspaceOK)$('workspace-banner').textContent=health.workspace_error||'Workspace unavailable. Retry after restoring access.';$('save-plan').disabled=saving||!currentResult||!integrityOK||!workspaceOK;$('record-actuals').disabled=recordingActuals||!actualsValid||!integrityOK||!workspaceOK;}catch(error){}},5000);
 queueCalculation();
 </script></body></html>'''
 
@@ -493,23 +516,39 @@ def workspace_lock(workspace):
             lock.rmdir()
 
 
-def integrity_check():
+def answer_key_cases():
+    def infeasible():
+        inputs = {**initial_inputs(),'N':2000,'system':'Integrity check','smes':1,
+                  'hours_per_sme':1,'minutes_per_conversation':12,'threshold':.001}
+        out = calculate_core(inputs,include_sensitivity=False)
+        return out['n_assure']==2995 and out['n_assure']>2000 and out['binding']=='cochran' and any(w['code']=='W7' for w in out['warnings'])
     checks = [
-        precision_calc(1000000,.95,'absolute',.05,.5)['n_cochran'] == 385,
-        precision_calc(5000,.95,'absolute',.05,.5)['n_cochran'] == 357,
-        precision_calc(1000000,.99,'absolute',.03,.5)['n_cochran'] == 1840,
-        assurance_calc(.95,.01)['n_assure'] == 299,
-        round(detection_power(200,.01),4) == .8660,
-        precision_calc(20000,.95,'relative',.25,.04)['n_cochran'] == 1374,
-        round(reverse_margin(5000,357,.5,.95),4) == .0500,
-        round(inverse_threshold(120,.95),4) == .0247,
-        capacity_max(50000,24,.15,50,12) == 70 and
-            round(reverse_margin(50000,70,.5,.95),4) == .1171 and
-            round(inverse_threshold(70,.95),4) == .0419,
-        review_effort(40,.15,50,12)['dr_count'] == 40,
-        assurance_calc(.95,.001)['n_assure'] == 2995,
+        lambda: precision_calc(1000000,.95,'absolute',.05,.5)['n_cochran'] == 385,
+        lambda: precision_calc(5000,.95,'absolute',.05,.5)['n_cochran'] == 357,
+        lambda: precision_calc(1000000,.99,'absolute',.03,.5)['n_cochran'] == 1840,
+        lambda: assurance_calc(.95,.01)['n_assure'] == 299,
+        lambda: round(detection_power(200,.01),4) == .8660,
+        lambda: precision_calc(20000,.95,'relative',.25,.04)['n_cochran'] == 1374,
+        lambda: round(reverse_margin(5000,357,.5,.95),4) == .0500,
+        lambda: round(inverse_threshold(120,.95),4) == .0247,
+        lambda: capacity_max(50000,24,.15,50,12) == 70 and review_effort(70,.15,50,12)=={'dr_count':50,'reviews':120,'hours':24.0}
+            and not fits(review_effort(71,.15,50,12)['hours'],24)
+            and round(reverse_margin(50000,70,.5,.95),4) == .1171 and round(inverse_threshold(70,.95),4) == .0419,
+        lambda: review_effort(40,.15,50,12)['dr_count'] == 40 and review_effort(400,.15,50,12)['dr_count'] == 60,
+        infeasible,
     ]
-    return {'passed':sum(checks),'total':11}
+    results = {}
+    for number, check in enumerate(checks,1):
+        try:
+            results[f'K{number}'] = bool(check())
+        except Exception:
+            results[f'K{number}'] = False
+    return results
+
+
+def integrity_check():
+    checks = answer_key_cases()
+    return {'passed':sum(checks.values()),'total':11}
 
 
 def save_plan(workspace, inputs):
@@ -653,17 +692,39 @@ def latest_record(folder, kind, requested_version=None):
         return None
     version, path = max(versions)
     try:
+        if not path.resolve().is_relative_to(Path(folder).resolve()):
+            raise ValueError('Record path escapes its plan folder')
         record = json.loads(path.read_text(encoding='utf-8'))
-        if not isinstance(record,dict) or record.get('schema_version') != 1:
+        if not isinstance(record,dict) or type(record.get('schema_version')) is not int or record['schema_version'] != 1:
             raise ValueError('Unsupported or missing schema version')
         if kind == 'plan':
             plan = record['plan']
             validate_plan({**record['inputs'],**{k:plan[k] for k in ('system','period_type','period_label')}})
             if plan['version'] != version or plan['plan_id'] != Path(folder).name:
                 raise ValueError('Plan identity/version does not match its record path')
-            for key in ('n_headline','hours','verdict'):
-                record['outputs'][key]
-            record['saved_at']
+            if type(record['outputs']['n_headline']) is not int or not 1 <= record['outputs']['n_headline'] <= record['inputs']['N']:
+                raise ValueError('Invalid saved sample size')
+            hours = record['outputs']['hours']
+            if type(hours) not in (int,float) or not math.isfinite(hours) or hours < 0:
+                raise ValueError('Invalid saved review hours')
+            if record['outputs']['verdict'] not in ('FITS','DOES NOT FIT'):
+                raise ValueError('Invalid saved verdict')
+            stamp = datetime.datetime.fromisoformat(record['saved_at'])
+            if stamp.utcoffset() is None:
+                raise ValueError('Saved timestamp has no UTC offset')
+            record['warnings']
+        else:
+            if record['version'] != version or record['plan_id'] != Path(folder).name:
+                raise ValueError('Actuals identity/version does not match its record path')
+            referenced = latest_record(folder,'plan',record['plan_version'])
+            if referenced is None:
+                raise ValueError('Referenced plan version is missing')
+            validate_actuals(referenced,record['inputs'])
+            obs = record['outputs']['observed_rate']
+            if type(obs) not in (int,float) or not math.isfinite(obs) or obs != record['inputs']['issues']/record['inputs']['reviewed']:
+                raise ValueError('Invalid saved observed rate')
+            if datetime.datetime.fromisoformat(record['recorded_at']).utcoffset() is None:
+                raise ValueError('Recorded timestamp has no UTC offset')
             record['warnings']
         return record
     except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -702,6 +763,8 @@ def list_plans(workspace):
                            verdict=plan['outputs']['verdict'],n_headline=plan['outputs']['n_headline'],
                            hours=plan['outputs']['hours'],warnings=[w['code'] for w in plan['warnings']],
                            actuals=detail['actuals'])
+                if detail['actuals']:
+                    row['warnings'] = list(dict.fromkeys(row['warnings'] + [w['code'] for w in detail['actuals']['warnings']]))
             except (OSError,ValueError,KeyError,TypeError) as exc:
                 row['unreadable'] = str(exc)
             rows.append(row)
@@ -802,6 +865,8 @@ def plan_reference(workspace, data):
 
 
 def save_actuals(workspace, plan_id, data):
+    if integrity_check()['passed'] != 11:
+        raise PersistenceError('Integrity check failed. Actuals were not saved.')
     if not isinstance(data,dict):
         raise ValidationError({'actuals':'Enter actual review results.'})
     with workspace_lock(workspace):
@@ -957,7 +1022,7 @@ def atomic_write(path, text, encoding='utf-8', immutable=False):
 
 
 def validate_config(config):
-    if not isinstance(config, dict) or config.get('schema_version') != 1:
+    if not isinstance(config, dict) or type(config.get('schema_version')) is not int or config['schema_version'] != 1:
         raise ConfigError('schema_version must be 1')
     if not isinstance(config.get('workspace'), str) or not config['workspace'].strip():
         raise ConfigError('workspace must be a nonempty path')
@@ -995,17 +1060,33 @@ def create_app(config=None):
     config = validate_config(config if config is not None else load_config())
     app = Flask(__name__)
     app.config['PLANNER_CONFIG'] = dict(config)
-    workspace_health(config['workspace'])
+    cases = answer_key_cases()
+    app.config['ANSWER_KEY_CASES'] = cases
+    app.config['INTEGRITY_CHECK'] = {'passed':sum(cases.values()),'total':11}
+    failed = [name for name,passed in cases.items() if not passed]
+    if failed:
+        print('Answer key failed: cases '+', '.join(failed)+'. Results cannot be trusted; saving is disabled.')
+    ok, error = workspace_health(config['workspace'])
+    app.config['WORKSPACE_OK'], app.config['WORKSPACE_ERROR'] = ok, error
+
+    def check_workspace():
+        ok, error = workspace_health(config['workspace'])
+        app.config['WORKSPACE_OK'], app.config['WORKSPACE_ERROR'] = ok, error
+        return ok, error
 
     @app.get('/')
     def index():
         iso = datetime.date.today().isocalendar()
-        return render_template_string(PAGE_HTML, initial=initial_inputs(), current_week=f'{iso.year:04d}-W{iso.week:02d}')
+        ok, error = check_workspace()
+        return render_template_string(PAGE_HTML, initial=initial_inputs(), current_week=f'{iso.year:04d}-W{iso.week:02d}',integrity_ok=not failed,failed_cases=failed,workspace_ok=ok,workspace_error=error)
 
     @app.get('/api/health')
     def health():
-        ok, _ = workspace_health(config['workspace'])
-        return jsonify(tool=TOOL_NAME, version=TOOL_VERSION, workspace_ok=ok)
+        ok, error = check_workspace()
+        result = dict(tool=TOOL_NAME, version=TOOL_VERSION, workspace_ok=ok)
+        if not ok:
+            result['workspace_error'] = error
+        return jsonify(result)
 
     @app.post('/api/quit')
     def quit_app():
@@ -1020,10 +1101,25 @@ def create_app(config=None):
 
     @app.errorhandler(PersistenceError)
     def persistence_error(error):
+        app.config['WORKSPACE_OK'] = False
+        app.config['WORKSPACE_ERROR'] = str(error)
         return jsonify(error=str(error)), 503
+
+    @app.errorhandler(Exception)
+    def unexpected_error(error):
+        status = getattr(error,'code',None)
+        if type(status) is int and 400 <= status <= 599:
+            return jsonify(error=getattr(error,'description','Request unavailable')),status
+        app.logger.exception('Unexpected error in planner endpoint')
+        return jsonify(error='Unexpected error',details=type(error).__name__),500
 
     @app.post('/api/plans')
     def save():
+        if failed:
+            return jsonify(error='Answer key failed: cases '+', '.join(failed)+'. Saving is disabled.'),503
+        ok, error = check_workspace()
+        if not ok:
+            raise PersistenceError(error)
         return jsonify(save_plan(config['workspace'], request.get_json(silent=True)))
 
     @app.get('/api/plans')
@@ -1042,6 +1138,12 @@ def create_app(config=None):
     def prefill_system():
         return jsonify(prefill(config['workspace'],request.args.get('system','')))
 
+    @app.get('/api/method')
+    def method():
+        return jsonify(constants={'Z':{f'{k:.2f}':v for k,v in Z.items()}},formulas=FORMULAS,
+                       assumptions=ASSUMPTIONS,terms=FORMULA_TERMS,references=REFERENCES,
+                       method_version=METHOD_VERSION,tool_version=TOOL_VERSION,integrity_check=app.config['INTEGRITY_CHECK'],failed_cases=failed)
+
     @app.get('/api/plans/<plan_id>')
     def plan_detail(plan_id):
         detail = read_plan(config['workspace'], plan_id)
@@ -1059,6 +1161,11 @@ def create_app(config=None):
 
     @app.post('/api/plans/<plan_id>/actuals')
     def record_actuals(plan_id):
+        if failed:
+            return jsonify(error='Answer key failed: cases '+', '.join(failed)+'. Recording is disabled.'),503
+        ok, error = check_workspace()
+        if not ok:
+            raise PersistenceError(error)
         result = save_actuals(config['workspace'],plan_id,request.get_json(silent=True))
         if result is None:
             return jsonify(error='Saved plan version was not found.'), 404
@@ -1154,6 +1261,12 @@ def launch(config, browser_open=None):
 
 
 def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    if '--selftest' in argv:
+        cases = answer_key_cases()
+        for name, passed in cases.items():
+            print(('PASS ' if passed else 'FAIL ')+name)
+        return 0 if all(cases.values()) else 1
     try:
         config = load_config()
     except ConfigError as exc:
