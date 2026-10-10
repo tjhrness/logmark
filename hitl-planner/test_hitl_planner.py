@@ -12,6 +12,182 @@ import pytest
 import hitl_planner as hp
 
 
+def test_csv_log_exact_schema_roundtrip_rebuild_and_failure(tmp_path,monkeypatch,capsys):
+    import csv
+    columns='plan_id,period_type,period_label,system,plan_version,saved_at,N,confidence,margin_mode,margin_input,E_effective,p,p_source,certify,threshold,smes,hours_per_sme,minutes_per_conversation,dr_share,dr_floor,n_cochran,n_assure,n_headline,binding,dr_count,reviews,hours,capacity,verdict,n_max_at_capacity,margin_at_capacity,threshold_at_capacity,detection_power,warnings,actuals_version,recorded_at,reviewed,issues,observed_rate,achieved_margin,certify_status,agreement,notes'.split(',')
+    client=hp.create_app({'schema_version':1,'workspace':str(tmp_path),'port':5062}).test_client()
+    a=hp.save_plan(tmp_path,scenario(system='日本語, A',period_label='2026-09'))
+    hp.save_plan(tmp_path,scenario(system='Z',period_label='2026-10'))
+    hp.save_plan(tmp_path,scenario(system='A',period_label='2026-10',N=40,margin_input=.005))
+    assert (tmp_path/'plans_log.csv').is_file()
+    notes='Calibration, notes\nSecond line 日本語'
+    hp.save_actuals(tmp_path,a['plan_id'],dict(reviewed=382,issues=11,agreement=.86,notes=notes))
+    result=client.get('/api/log/rebuild').json
+    assert result=={'path':str(tmp_path/'plans_log.csv'),'rows':3}
+    path=Path(result['path']);original=path.read_bytes()
+    assert original.startswith(b'\xef\xbb\xbf')
+    with path.open(encoding='utf-8-sig',newline='') as stream:
+        reader=csv.DictReader(stream);rows=list(reader)
+        assert reader.fieldnames==columns and len(columns)==43
+    assert [r['system'] for r in rows]==['A','Z','日本語, A']
+    assert len(rows)==3 and rows[2]['notes']==notes
+    assert rows[0]['warnings']=='W2;W4;W5;W6;W7'
+    assert rows[1]['actuals_version']=='' and rows[2]['actuals_version']=='1'
+    assert client.get('/api/log/rebuild').json['rows']==3 and path.read_bytes()==original
+    broken=tmp_path/'2026-11 - Broken';broken.mkdir();hp.atomic_write(broken/'plan_v1.json','{')
+    assert client.get('/api/log/rebuild').json['rows']==3
+    assert 'Skipped unreadable' in capsys.readouterr().out
+    replace=hp.os.replace
+    def fail_csv(source,target):
+        if Path(target).name=='plans_log.csv':
+            raise PermissionError('CSV locked')
+        return replace(source,target)
+    monkeypatch.setattr(hp.os,'replace',fail_csv)
+    response=client.post('/api/plans',json=scenario(system='New'))
+    assert response.status_code==503 and 'saved' in response.json['error']
+    assert (tmp_path/'2026-10 - New'/'plan_v1.json').is_file()
+    assert path.read_bytes()==original
+    monkeypatch.setattr(hp.os,'replace',replace)
+    assert client.get('/api/log/rebuild').json['rows']==4
+
+
+def test_actuals_browser_contract_controls_and_server_display(tmp_path):
+    client=hp.create_app({'schema_version':1,'workspace':str(tmp_path),'port':5062}).test_client()
+    html=client.get('/').text
+    for field in ('actuals-plan','actuals-summary','actuals-form','reviewed','issues','agreement','notes','actuals-results','record-actuals','record-again'):
+        assert f'id="{field}"' in html
+    assert 'actualsTicket' in html and '/api/actuals/calc' in html
+    assert 'Number' in html and '/100' in html
+    info=hp.save_plan(tmp_path,scenario())
+    data=dict(plan_id=info['plan_id'],reviewed=382,issues=11,agreement=.86,notes='')
+    o=client.post('/api/actuals/calc',json=data).json['outputs']
+    assert o['display']['observed_rate']=='2.9%' and o['display']['achieved_margin']=='±1.7%'
+
+
+def test_actuals_saves_versions_report_and_recoverable_failure(tmp_path,monkeypatch):
+    client=hp.create_app({'schema_version':1,'workspace':str(tmp_path),'port':5062}).test_client()
+    info=hp.save_plan(tmp_path,scenario())
+    folder=Path(info['folder'])
+    plan_bytes=(folder/'plan_v1.json').read_bytes()
+    hp.save_plan(tmp_path,scenario(N=100))
+    route='/api/plans/'+info['plan_id']+'/actuals'
+    data=dict(reviewed=382,issues=11,agreement=.86,notes='<script>&,\n日本語',plan_version=1)
+    first=client.post(route,json=data)
+    assert first.status_code==200 and first.json['version']==1
+    original=(folder/'actuals_v1.json').read_bytes()
+    saved=json.loads(original)
+    assert saved['plan_version']==1 and saved['outputs']['observed_rate']==11/382
+    assert client.post(route,json={**data,'issues':0}).json['version']==2
+    assert original==(folder/'actuals_v1.json').read_bytes()
+    assert plan_bytes==(folder/'plan_v1.json').read_bytes()
+    html=(folder/'report.html').read_text(encoding='utf-8')
+    assert '<h2>Actuals</h2>' in html and '&lt;script&gt;&amp;' in html
+    assert '<script>' not in html and 'below' in html
+    assert 'Recorded against plan version 1' in html and 'Plan version 2' in html
+    assert client.get('/api/plans/'+info['plan_id']).json['actuals']['version']==2
+    assert client.post(route,json={**data,'issues':400}).status_code==400
+    assert client.post('/api/plans/unknown/actuals',json=data).status_code==404
+    replace=hp.os.replace
+    def fail_report(source,target):
+        if Path(target).name=='report.html':
+            raise PermissionError('report locked')
+        return replace(source,target)
+    monkeypatch.setattr(hp.os,'replace',fail_report)
+    response=client.post(route,json=data)
+    assert response.status_code==503 and 'saved' in response.json['error']
+    assert (folder/'actuals_v3.json').is_file() and (folder/'actuals_v1.json').read_bytes()==original
+    assert not list(folder.glob('*.tmp'))
+
+
+def test_actuals_api_stateless_and_saved_plan_authority(tmp_path):
+    client = hp.create_app({'schema_version':1,'workspace':str(tmp_path),'port':5062}).test_client()
+    info=hp.save_plan(tmp_path,scenario())
+    data=dict(plan_id=info['plan_id'],reviewed=382,issues=11,agreement=.86,notes='',N=1,confidence=.9,threshold=.5)
+    before={p:p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}
+    for _ in range(3):
+        response=client.post('/api/actuals/calc',json=data)
+        assert response.status_code==200
+        assert set(response.json)=={'outputs','warnings'}
+        o=response.json['outputs']
+        assert o['observed_rate']==11/382
+        assert o['achieved_margin']==pytest.approx(.0167,abs=.0001)
+        assert o['certify_status'].startswith('not applicable')
+        assert [w['code'] for w in response.json['warnings']]==['W9']
+    assert before=={p:p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}
+    assert client.post('/api/actuals/calc',json={**data,'issues':0}).json['outputs']['bound_statement']
+    assert client.post('/api/actuals/calc',json={**data,'notes':3}).status_code==400
+    assert client.post('/api/actuals/calc',json={**data,'plan_id':'unknown'}).status_code==404
+    hp.save_plan(tmp_path,scenario(N=100))
+    assert client.post('/api/actuals/calc',json=data).status_code==400
+    assert client.post('/api/actuals/calc',json={**data,'plan_version':1}).status_code==200
+
+
+@pytest.mark.parametrize('issues,status',[(0,'met'),(1,'not applicable (issues found; report the observed rate)'),(400,'not applicable (issues found; report the observed rate)')])
+def test_actuals_extremes_and_shared_formulas(tmp_path,issues,status):
+    info = hp.save_plan(tmp_path,scenario())
+    path = Path(info['folder'])/'plan_v1.json'
+    original = path.read_bytes()
+    plan = json.loads(original)
+    out = hp.calculate_actuals(plan,{'reviewed':400,'issues':issues,'agreement':.8,'notes':'safe'})
+    o=out['outputs']
+    assert o['observed_rate'] == issues/400 and o['certify_status'] == status
+    if issues in (0,400):
+        assert o['achieved_margin'] is None and o['bound_statement']
+        assert ('below' if issues==0 else 'above') in o['bound_statement']
+    else:
+        assert o['achieved_margin'] == hp.reverse_margin(50000,400,1/400,.95)
+    assert path.read_bytes() == original
+
+
+def test_actuals_boundaries_relative_and_validation(tmp_path):
+    info=hp.save_plan(tmp_path,scenario(p=.1,margin_mode='relative',margin_input=.25))
+    plan=json.loads((Path(info['folder'])/'plan_v1.json').read_text(encoding='utf-8'))
+    def calc(reviewed=1000,issues=100,agreement=.8):
+        return hp.calculate_actuals(plan,dict(reviewed=reviewed,issues=issues,agreement=agreement,notes=''))
+    for count,expected in ((200,False),(201,True),(50,False),(49,True)):
+        assert ('W9' in [w['code'] for w in calc(issues=count)['warnings']]) is expected
+    assert 'W10' not in [w['code'] for w in calc()['warnings']]
+    assert 'W10' in [w['code'] for w in calc(agreement=.799)['warnings']]
+    n=plan['outputs']['n_headline']
+    assert 'W8' not in [w['code'] for w in calc(reviewed=n,issues=1)['warnings']]
+    assert 'W8' in [w['code'] for w in calc(reviewed=n-1,issues=1)['warnings']]
+    o=calc()['outputs']
+    assert o['achieved_margin_relative'] == o['achieved_margin']/.1
+    assert calc(reviewed=1,issues=0)['outputs']['certify_status'].startswith('not met')
+    plan['inputs']['certify']=False
+    assert calc(issues=0)['outputs']['certify_status'] == 'not planned'
+    for changes in ({'reviewed':0},{'reviewed':50001},{'reviewed':True},{'issues':1001},{'issues':-1},{'agreement':float('nan')},{'agreement':1.01},{'notes':None}):
+        data=dict(reviewed=1000,issues=100,agreement=.8,notes='');data.update(changes)
+        with pytest.raises(hp.ValidationError):
+            hp.calculate_actuals(plan,data)
+    plan['inputs']['N']=1
+    assert hp.calculate_actuals(plan,dict(reviewed=1,issues=1,agreement=1,notes=''))['outputs']['achieved_margin'] is None
+
+
+def test_system_prefill_timestamp_matching_and_observed_history(tmp_path):
+    old = hp.save_plan(tmp_path,scenario(system='HR Bot',period_label='2026-09',p=.04))
+    new = hp.save_plan(tmp_path,scenario(system='HR Bot',period_label='2026-08',p=.03))
+    client = hp.create_app({'schema_version':1,'workspace':str(tmp_path),'port':5062}).test_client()
+    assert client.get('/api/prefill?system=unknown').json == {}
+    result = client.get('/api/prefill?system=%20hr%20bot%20').json
+    assert result['inputs']['p'] == .03 and result['p_source'] == 'last_planned'
+    assert result['inputs']['N'] is None and result['inputs']['period_label'] == hp.initial_inputs()['period_label']
+    assert old['plan_id'] not in result['prefilled_from']
+    assert client.get('/api/systems').json == ['HR Bot']
+    actual = {'schema_version':1,'recorded_at':'2026-10-10T08:00:00+05:30','plan_id':old['plan_id'],
+              'plan_version':1,'version':1,'inputs':{'reviewed':100,'issues':0,'agreement':.8,'notes':''},
+              'outputs':{'observed_rate':0},'warnings':[]}
+    hp.write_json(Path(old['folder'])/'actuals_v1.json',actual,immutable=True)
+    result = client.get('/api/prefill?system=HR%20Bot').json
+    assert result['inputs']['p'] == .001 and result['p_source'] == 'last_observed'
+    actual['version'] = 2
+    actual['outputs']['observed_rate'] = .5
+    actual['inputs']['issues'] = 50
+    hp.write_json(Path(old['folder'])/'actuals_v2.json',actual,immutable=True)
+    assert 'W2' not in [w['code'] for w in client.post('/api/calc',json=scenario(system='HR Bot')).json['warnings']]
+    assert 'prefillTicket' in client.get('/').text
+
+
 def test_history_ui_and_calendar_period_sorting(tmp_path):
     hp.save_plan(tmp_path,scenario(system='September',period_label='2026-09'))
     hp.save_plan(tmp_path,scenario(system='Week',period_type='week',period_label='2026-W40'))

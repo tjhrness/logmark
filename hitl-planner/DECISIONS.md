@@ -19,3 +19,6 @@ This is a planning ledger, not authorization to change statistical formulas or f
 | Date | Decision ID | Change | Approved by |
 |---|---|---|---|
 | — | — | — | — |
+
+## Implementation observation: all-issue prefill boundary
+Specification §4.6 sets next-cycle p=max(obs,0.001), which yields 1 when every review finds an issue. I8 limits p to 0.999. Both contracts are preserved: prefill retains the specified observed value and Plan validation requires manual correction before saving. No silent upper clamp or statistical method change was introduced. Owner clarification can resolve this boundary in a future specification revision.

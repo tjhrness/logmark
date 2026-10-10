@@ -124,10 +124,10 @@ Each session row should be ticked **only after** all six gates and the row-speci
     - [x] Report self-contained and A4 printable offline.
     - [x] Contains inputs, seven statements and arithmetic.
     - [x] Escaping of special characters and regeneration verified.
-- [ ] **28 — Generated plans_log.csv and rebuild API.** CSV is reliable derived read model for spreadsheet inspection and history. Spec §8.5, §9 GET /api/log/rebuild, §11.3. Prompt: `prompts/28_generated_plans_log_csv_and_rebuild_api.md` — Merged commit/PR: `________`
-    - [ ] 43-column CSV exact header order and UTF8 BOM.
-    - [ ] CSV notes with commas/newlines round-trip.
-    - [ ] Rebuild derives from latest JSON, repeat is idempotent.
+- [x] **28 — Generated plans_log.csv and rebuild API.** CSV is reliable derived read model for spreadsheet inspection and history. Spec §8.5, §9 GET /api/log/rebuild, §11.3. Prompt: `prompts/28_generated_plans_log_csv_and_rebuild_api.md` — Merged commit/PR: `________`
+    - [x] 43-column CSV exact header order and UTF8 BOM.
+    - [x] CSV notes with commas/newlines round-trip.
+    - [x] Rebuild derives from latest JSON, repeat is idempotent.
 
 ### History
 
@@ -139,10 +139,10 @@ Each session row should be ticked **only after** all six gates and the row-speci
     - [x] History newest-first rows and case-insensitive filtering.
     - [x] Load restores period and all inputs including N.
     - [x] Corrupt rows have no action buttons; no delete.
-- [ ] **23 — Auto-complete and history prefill.** New period can start from previous observations while never inventing current population. Spec §3.1–3.3, §4.6 next-cycle p, §9 systems/prefill, §11.3. Prompt: `prompts/23_auto_complete_and_history_prefill.md` — Merged commit/PR: `________`
-    - [ ] Case-insensitive saved systems datalist/prefill.
-    - [ ] Observed-rate source and zero-rate 0.1% floor.
-    - [ ] N blank, period reset, manual field edits preserved.
+- [x] **23 — Auto-complete and history prefill.** New period can start from previous observations while never inventing current population. Spec §3.1–3.3, §4.6 next-cycle p, §9 systems/prefill, §11.3. Prompt: `prompts/23_auto_complete_and_history_prefill.md` — Merged commit/PR: `________`
+    - [x] Case-insensitive saved systems datalist/prefill.
+    - [x] Observed-rate source and zero-rate 0.1% floor.
+    - [x] N blank, period reset, manual field edits preserved.
 - [ ] **29 — History consistency and corrupt-file handling.** History, log, and prefill consistently reflect readable source records without silent data loss. Spec §7.3, §8.5, §10 E4, §11.3. Prompt: `prompts/29_history_consistency_and_corrupt_file_handling.md` — Merged commit/PR: `________`
     - [ ] Unreadable folders visible but never altered.
     - [ ] History/CSV/Prefill agree on readable records.
@@ -150,22 +150,22 @@ Each session row should be ticked **only after** all six gates and the row-speci
 
 ### Actuals
 
-- [ ] **24 — Actuals calculations and W8–W10.** All actuals metrics reuse F9/F10 and are correctly interpretable in extreme outcomes. Spec §4.6–4.8, §5 W8–W10, §11.2. Prompt: `prompts/24_actuals_calculations_and_w8_w10.md` — Merged commit/PR: `________`
-    - [ ] Interior/zero/all issues mapped to margin/bounds.
-    - [ ] Certify met/not met/off/issues-found cases.
-    - [ ] W8–W10 strict boundary pairs and validation.
-- [ ] **25 — Stateless Actuals calculation endpoint.** Actuals can be previewed and validated before committing a record. Spec §9 POST /api/actuals/calc, §10 E1. Prompt: `prompts/25_stateless_actuals_calculation_endpoint.md` — Merged commit/PR: `________`
-    - [ ] Actuals calc uses saved plan not client-forged values.
-    - [ ] 382/11/.86 yields observed~2.9%/margin~1.7%.
-    - [ ] Stateless 400 and 404 behavior tested.
-- [ ] **26 — Versioned actuals plus report regeneration.** Actuals recording is durable and immediately visible in latest report and read API. Spec §3.1, §8.3–8.4, §9, §11.3. Prompt: `prompts/26_versioned_actuals_plus_report_regeneration.md` — Merged commit/PR: `________`
-    - [ ] Versioned actuals v1/v2 and preserved bytes.
-    - [ ] Report regenerates from latest persisted JSON.
-    - [ ] Actuals plan_version reference remains correct.
-- [ ] **27 — Actuals complete browser tab.** End user can finish a Plan→Actuals cycle from the browser alone. Spec §7.2, §4.6, §9. Prompt: `prompts/27_actuals_complete_browser_tab.md` — Merged commit/PR: `________`
-    - [ ] Actuals form, plan summary and live bound display.
-    - [ ] Record again generates new version safely.
-    - [ ] Agreement 86% vs <80% warning and invalid-count gate.
+- [x] **24 — Actuals calculations and W8–W10.** All actuals metrics reuse F9/F10 and are correctly interpretable in extreme outcomes. Spec §4.6–4.8, §5 W8–W10, §11.2. Prompt: `prompts/24_actuals_calculations_and_w8_w10.md` — Merged commit/PR: `________`
+    - [x] Interior/zero/all issues mapped to margin/bounds.
+    - [x] Certify met/not met/off/issues-found cases.
+    - [x] W8–W10 strict boundary pairs and validation.
+- [x] **25 — Stateless Actuals calculation endpoint.** Actuals can be previewed and validated before committing a record. Spec §9 POST /api/actuals/calc, §10 E1. Prompt: `prompts/25_stateless_actuals_calculation_endpoint.md` — Merged commit/PR: `________`
+    - [x] Actuals calc uses saved plan not client-forged values.
+    - [x] 382/11/.86 yields observed~2.9%/margin~1.7%.
+    - [x] Stateless 400 and 404 behavior tested.
+- [x] **26 — Versioned actuals plus report regeneration.** Actuals recording is durable and immediately visible in latest report and read API. Spec §3.1, §8.3–8.4, §9, §11.3. Prompt: `prompts/26_versioned_actuals_plus_report_regeneration.md` — Merged commit/PR: `________`
+    - [x] Versioned actuals v1/v2 and preserved bytes.
+    - [x] Report regenerates from latest persisted JSON.
+    - [x] Actuals plan_version reference remains correct.
+- [x] **27 — Actuals complete browser tab.** End user can finish a Plan→Actuals cycle from the browser alone. Spec §7.2, §4.6, §9. Prompt: `prompts/27_actuals_complete_browser_tab.md` — Merged commit/PR: `________`
+    - [x] Actuals form, plan summary and live bound display.
+    - [x] Record again generates new version safely.
+    - [x] Agreement 86% vs <80% warning and invalid-count gate.
 
 ### Method
 
@@ -235,7 +235,7 @@ Each session row should be ticked **only after** all six gates and the row-speci
 | 2026-10-08 | 00 | Port 5062 requires comparison with existing Pareto/IMR tool scripts, which were not attached. | Confirm on Windows before launch. |
 | 2026-10-08 | 00 | External code-generation agent may not have PDF-reading support. | Supply its readable PDF or extracted text without altering the source contract. |
 
-**Progress:** 22 / 36 implementation tasks completed in this supplied planning kit. The checklist is not evidence of implemented or tested code.
+**Progress:** 28 / 36 implementation tasks completed in this supplied planning kit. The checklist is not evidence of implemented or tested code.
 
 ## Codex task review gate (repeat before checking off any row)
 
@@ -298,3 +298,15 @@ Each session row should be ticked **only after** all six gates and the row-speci
 - Task 20 commit: 5d8aaed. Task 21 RED: missing GET list. GREEN: 139 passed; numeric v10 over v9, untouched immutable bytes, case-preserved identity, corrupt row and unknown404, latest detail. User explicitly approved full-kit public GitHub publication.
 
 - Task 21 commit: 9325629. Task 22 RED: missing History controls. GREEN: 140 passed; month/week calendar ordering, Windows browser mixed-case filter leaves one row/three actions, corrupt row actionless, Load restores N50000 and saved August period with source badge.
+
+- Task 22 commit: ef42886. Task 23 RED: missing prefill404. GREEN: 141 passed; timestamp-over-period matching, case/space matching, blank N/current period, zero-observed floor and W2 suppression. Windows browser carried p4% and team values, kept current October period/manual N12345, and manual p3% survived asynchronous prefill. Full kit published in draft PR https://github.com/tjhrness/logmark/pull/3 through step22.
+
+- Task 23 commit: 4aad8c7. Task 24 RED: four missing Actuals helper failures. GREEN: 145 passed; zero/one/all, strict W8/W9/W10, reverse/relative margin, certification branches, invalid finite/type/count limits and unchanged plan bytes. Specification inconsistency: all-issue obs=1 makes next-cycle p=1 under §4.6 while I8 max is .999; preserve formula, reject invalid plan until manual edit (no silent clamp).
+
+- Task 24 commit: f426546. Task 25 RED: missing Actuals calc404. GREEN: 146 passed; acceptance382/11/.86 produces2.9%/1.7%/W9, zero bound, no filesystem changes, forged client statistics ignored and explicit v1 reference survives new v2.
+
+- Task 25 commit: d012dcc. Task 26 RED: missing Actuals save404. GREEN: 147 passed; actuals v1/v2 immutable, explicit old plan reference, offset metadata, escaped notes and zero bounds in latest report, missing/invalid routes, report failure preserves saved v3 and prior bytes with recoverable503.
+
+- Task 26 commit: f65a283. Task 27 RED: missing Actuals controls. GREEN: 148 passed; browser acceptance382/11/86 ->2.9%/1.7%/W9, saved read-only v1; Record again, reviewed50001 disables save; zero issues/79% agreement saved v2 with0.78% bound/met/W9/W10; planned summary unchanged.
+
+- Task 27 commit: faa3576. Task 28 RED: no generated CSV. GREEN: 149 passed; exact43 columns/BOM, latest-plan/latest-actual rows, original multiline Unicode notes preserved (fixed Windows newline translation), deterministic sorting/idempotent rebuild, corrupt skip, CSV-locked partial save keeps JSON and retry rebuild succeeds. New floor-warning fixture corrected to N40; expected contract unchanged.

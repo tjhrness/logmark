@@ -1,5 +1,7 @@
 """Offline HITL Sample Size Planner. See docs/ for the immutable contract."""
 import json
+import csv
+import io
 import math
 import datetime
 import re
@@ -41,6 +43,12 @@ REFERENCES = [
     'Hanley, J. A., & Lippman-Hand, A. (1983). "If nothing goes wrong, is everything all right? Interpreting zero numerators." JAMA, 249(13), 1743–1745.',
     "This tool's answer key (§11.1).",
 ]
+CSV_COLUMNS = ('plan_id,period_type,period_label,system,plan_version,saved_at,N,confidence,'
+               'margin_mode,margin_input,E_effective,p,p_source,certify,threshold,smes,hours_per_sme,'
+               'minutes_per_conversation,dr_share,dr_floor,n_cochran,n_assure,n_headline,binding,dr_count,'
+               'reviews,hours,capacity,verdict,n_max_at_capacity,margin_at_capacity,threshold_at_capacity,'
+               'detection_power,warnings,actuals_version,recorded_at,reviewed,issues,observed_rate,'
+               'achieved_margin,certify_status,agreement,notes').split(',')
 CONFIG_PATH = Path(__file__).resolve().with_name('config.json')
 PAGE_HTML = r'''<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>HITL Sample Size Planner</title>
@@ -91,7 +99,9 @@ input,select,textarea{font:inherit;width:100%;border:1px solid #aab8c9;border-ra
 <div class="card"><h2>What this sample can and can't say</h2><h3>Can say</h3><ol id="can-say"></ol><h3>Can't say</h3><ol id="cannot-say" start="4"></ol></div></div>
 </div><button id="save-plan" disabled>Save plan</button><div id="save-toast" role="status"></div></div>
 </div></section>
-<section id="actuals-tab" hidden><div class="card">Actuals are not yet available.</div></section>
+<section id="actuals-tab" hidden><div class="card"><label for="actuals-plan">Saved plan</label><select id="actuals-plan"><option value="">Choose a saved plan</option></select><div id="actuals-summary"></div><div id="actuals-existing" hidden></div><button id="record-again" hidden>Record again</button></div>
+<form id="actuals-form" class="card" hidden novalidate><div class="fields"><div><label for="reviewed">Conversations reviewed</label><input id="reviewed" type="number" min="1" step="1"></div><div><label for="issues">Conversations with issues</label><input id="issues" type="number" min="0" step="1"></div><div><label for="agreement">Double-review agreement (%)</label><input id="agreement" type="number" min="0" max="100" step="any"></div><div class="wide"><label for="notes">Notes</label><textarea id="notes" rows="4"></textarea></div></div><p class="note">Record review totals and process notes. Do not enter conversation contents.</p></form>
+<div id="actuals-results" class="card" hidden></div><button id="record-actuals" disabled hidden>Record actuals</button><div id="actuals-toast" role="status"></div></section>
 <section id="history-tab" hidden><div class="card"><label for="history-filter">Filter by system</label><input id="history-filter" type="search"><div id="history-notice" role="status"></div><table id="history-table"></table></div></section>
 <section id="method-tab" hidden><div class="card">Method view is not yet available.</div></section>
 </main><script>
@@ -129,6 +139,21 @@ async function loadSavedPlan(planId){try{const response=await fetch('/api/plans/
 function paintHistory(){const table=$('history-table'),heading=document.createElement('tr');for(const title of ['Period','System','Version','Saved at','Sample','Hours','Verdict','Warnings','Actuals','Observed rate','Achieved margin','Actions'])heading.append(textElement('th',title));const head=document.createElement('thead');head.append(heading);const body=document.createElement('tbody');const filter=$('history-filter').value.trim().toLocaleLowerCase();for(const plan of historyRows){if(filter&&!(plan.system||plan.plan_id).toLocaleLowerCase().includes(filter))continue;const row=document.createElement('tr');if(plan.unreadable){const cell=textElement('td',plan.plan_id+' · unreadable — '+plan.unreadable);cell.colSpan=12;row.append(cell);}else{const a=plan.actuals?.outputs;for(const value of [plan.period_label,plan.system,plan.version,plan.saved_at,plan.n_headline,plan.hours,plan.verdict,plan.warnings.join(';'),plan.actuals?'✔':'—',a?.display?.observed_rate||'—',a?.display?.achieved_margin||'—'])row.append(textElement('td',String(value)));const actions=document.createElement('td');const load=textElement('button','Load');load.onclick=()=>loadSavedPlan(plan.plan_id);actions.append(load);for(const kind of ['report','folder']){const button=textElement('button',kind==='report'?'Report':'Folder');button.onclick=()=>openSaved(kind,plan.plan_id,$('history-notice'));actions.append(button);}row.append(actions);}body.append(row);}table.replaceChildren(head,body);}
 async function refreshHistory(){try{const response=await fetch('/api/plans');const data=await response.json();if(!response.ok)throw new Error(data.error||'History unavailable.');historyRows=data;paintHistory();}catch(error){$('history-notice').textContent=error.message;}}
 $('history-filter').oninput=paintHistory;document.querySelector('[data-tab=history]').addEventListener('click',refreshHistory);
+let prefilledFrom=null,prefillTicket=0,prefillTimer;
+const baseFormInputs=formInputs;formInputs=()=>({...baseFormInputs(),prefilled_from:prefilledFrom});
+async function refreshSystems(){try{const response=await fetch('/api/systems');if(response.ok)$('systems').replaceChildren(...(await response.json()).map(s=>new Option(s,s)));}catch(error){}}
+function queuePrefill(){clearTimeout(prefillTimer);const ticket=++prefillTicket;prefilledFrom=null;const system=$('system').value;const snapshot=formInputs();prefillTimer=setTimeout(async()=>{try{const response=await fetch('/api/prefill?system='+encodeURIComponent(system));const data=await response.json();if(ticket!==prefillTicket||$('system').value!==system||!data.inputs)return;const current=formInputs(),merged={...current};for(const [key,value] of Object.entries(data.inputs)){if(key==='system'||key==='N'||key==='prefilled_from'||key==='p_source')continue;if(current[key]===snapshot[key])merged[key]=value;}merged.N=current.N;if(current.p===snapshot.p)merged.p_source=data.p_source;applyPlanInputs(merged);prefilledFrom=data.prefilled_from;$('prefill-banner').hidden=false;$('prefill-banner').textContent='Prefilled from '+data.prefilled_from+(data.actuals_recorded_at?' · p from actuals recorded '+data.actuals_recorded_at.slice(0,10):'');}catch(error){$('prefill-banner').hidden=false;$('prefill-banner').textContent='Previous settings could not be loaded.';}},150);}
+$('system').addEventListener('input',queuePrefill);refreshSystems();
+let selectedActualPlan=null,actualsTicket=0,actualsSelection=0,actualsTimer,actualsController,actualsValid=false,recordingActuals=false;
+function actualsInputs(){const data={plan_id:selectedActualPlan?.plan.plan_id,plan_version:selectedActualPlan?.plan.version,notes:$('notes').value};for(const field of ['reviewed','issues','agreement'])data[field]=$(field).value===''?null:Number($(field).value)/(field==='agreement'?100:1);return data;}
+function actualsErrors(errors){for(const e of $('actuals-form').querySelectorAll('.error'))e.remove();for(const e of $('actuals-form').querySelectorAll('.invalid'))e.classList.remove('invalid');for(const [field,message] of Object.entries(errors)){if(!['reviewed','issues','agreement','notes'].includes(field))continue;$(field).classList.add('invalid');$(field).after(textElement('span',message,'error'));}}
+function paintActuals(data,target){const o=data.outputs;target.hidden=false;target.replaceChildren(textElement('h2','Review results'),textElement('p','Observed rate: '+o.display.observed_rate),textElement('p',o.display.achieved_margin),textElement('p','Certify: '+o.display.certify_status),textElement('p','Agreement: '+o.display.agreement));const table=document.createElement('table');const heading=document.createElement('tr');heading.append(...['Measure','Planned','Actual'].map(v=>textElement('th',v)));table.append(heading);for(const item of o.display.comparison){const row=document.createElement('tr');row.append(textElement('th',item.label),textElement('td',item.planned),textElement('td',item.actual));table.append(row);}target.append(table,...data.warnings.map(w=>textElement('div',w.message,'warning '+w.severity)));}
+function queueActuals(){clearTimeout(actualsTimer);actualsController?.abort();actualsValid=false;$('record-actuals').disabled=true;$('actuals-results').classList.add('muted');const ticket=++actualsTicket,selection=actualsSelection;actualsTimer=setTimeout(async()=>{if(!selectedActualPlan)return;actualsController=new AbortController();try{const response=await fetch('/api/actuals/calc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(actualsInputs()),signal:actualsController.signal});const data=await response.json();if(ticket!==actualsTicket||selection!==actualsSelection)return;if(!response.ok){actualsErrors(data.errors||{});$('actuals-toast').textContent=data.error||'';return;}actualsErrors({});paintActuals(data,$('actuals-results'));$('actuals-results').classList.remove('muted');actualsValid=true;$('record-actuals').disabled=recordingActuals;}catch(error){if(error.name!=='AbortError')$('actuals-toast').textContent='Calculation unavailable. Check the local planner.';}},150);}
+async function selectActualPlan(){const ticket=++actualsSelection;actualsTicket++;actualsController?.abort();selectedActualPlan=null;actualsValid=false;for(const id of ['actuals-form','actuals-results','actuals-existing','record-again','record-actuals'])$(id).hidden=true;$('record-actuals').disabled=true;$('actuals-summary').replaceChildren();$('actuals-toast').textContent='';const id=$('actuals-plan').value;if(!id)return;try{const response=await fetch('/api/plans/'+encodeURIComponent(id));const data=await response.json();if(ticket!==actualsSelection)return;if(!response.ok)throw new Error(data.error||'Saved plan unavailable.');selectedActualPlan=data.plan;const p=data.plan,i=p.inputs,o=p.outputs;$('actuals-summary').append(textElement('p',p.plan.plan_id+' · plan version '+p.plan.version),textElement('p',o.display.headline),textElement('p','Planned sample '+o.display.n_headline+' · double reviews '+o.display.dr_count+' · margin '+o.display.E_effective+' · threshold '+o.display.threshold+' · expected rate '+o.display.expected_rate+' · population '+o.display.population));if(data.actuals){const a=data.actuals;paintActuals(a,$('actuals-existing'));$('actuals-existing').prepend(textElement('p','Actuals version '+a.version+' · recorded '+a.recorded_at+' · against plan version '+a.plan_version));$('actuals-existing').append(textElement('p',a.inputs.notes));$('record-again').hidden=false;}else openActualsForm();}catch(error){$('actuals-toast').textContent=error.message;}}
+function openActualsForm(){for(const field of ['reviewed','issues','agreement','notes'])$(field).value='';$('actuals-existing').hidden=true;$('record-again').hidden=true;$('actuals-form').hidden=false;$('record-actuals').hidden=false;$('actuals-results').hidden=true;actualsErrors({});queueActuals();}
+async function refreshActualPlans(){try{const response=await fetch('/api/plans');const data=await response.json();if(!response.ok)throw new Error(data.error||'Saved plans unavailable.');const value=$('actuals-plan').value;data.sort((a,b)=>(b.saved_at||'').localeCompare(a.saved_at||''));$('actuals-plan').replaceChildren(new Option('Choose a saved plan',''),...data.filter(p=>!p.unreadable).map(p=>new Option(p.plan_id+' · v'+p.version+' · '+p.verdict+' · '+p.saved_at,p.plan_id)));if(data.some(p=>p.plan_id===value))$('actuals-plan').value=value;await selectActualPlan();}catch(error){$('actuals-toast').textContent=error.message;}}
+$('actuals-plan').onchange=selectActualPlan;document.querySelector('[data-tab=actuals]').addEventListener('click',refreshActualPlans);$('actuals-form').onsubmit=e=>e.preventDefault();$('actuals-form').oninput=queueActuals;$('record-again').onclick=openActualsForm;
+$('record-actuals').onclick=async()=>{if(!selectedActualPlan||!actualsValid||recordingActuals)return;recordingActuals=true;$('record-actuals').disabled=true;const data=actualsInputs(),selection=actualsSelection;try{const response=await fetch('/api/plans/'+encodeURIComponent(data.plan_id)+'/actuals',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const result=await response.json();if(selection!==actualsSelection)return;if(!response.ok){actualsErrors(result.errors||{});$('actuals-toast').textContent=result.error||'Actuals could not be recorded.';return;}await selectActualPlan();const toast=$('actuals-toast');toast.replaceChildren(textElement('p','Recorded actuals version '+result.version+' for '+data.plan_id));const button=textElement('button','Open report');button.onclick=()=>openSaved('report',data.plan_id,toast);toast.append(button);}catch(error){$('actuals-toast').textContent='Recording unavailable. Check the local planner.';}finally{recordingActuals=false;$('record-actuals').disabled=!actualsValid;}};
 $('quit').onclick=async()=>{try{const response=await fetch('/api/quit',{method:'POST'});if(response.ok)document.body.textContent='Planner stopped. You may close this tab.';}catch(error){$('global-notices').textContent='The local planner is unavailable.';}};
 queueCalculation();
 </script></body></html>'''
@@ -316,6 +341,8 @@ def sensitivity_grid(inputs):
 
 
 def format_percent(value, small_precision=False):
+    if value is None:
+        return 'n/a'
     places = 2 if small_precision and value < .01 else 1
     return f'{value*100:.{places}f}%'
 
@@ -407,7 +434,8 @@ def calculate_core(inputs, include_sensitivity=True, observed_history=False):
     out['arithmetic'] = arithmetic_trace(i, out)
     out['display'] = {name: format_count(out[name]) for name in ('n_headline', 'n_cochran', 'n_assure', 'dr_count', 'reviews')}
     out['display'].update(hours=format_hours(out['hours']), capacity=format_hours(out['capacity']),
-                          E_effective=format_percent(out['E_effective']), detection_power=format_percent(out['detection_power']))
+                          E_effective=format_percent(out['E_effective']), detection_power=format_percent(out['detection_power']),
+                          population=format_count(i['N']),threshold=format_percent(i['threshold'],True),expected_rate=format_percent(i['p'],True))
     out['display'].update(
         headline=f'Review {n:,} conversations = {format_hours(out["hours"])} SME hours in {period_display(i["period_type"], i["period_label"])}',
         reviews_subline=f'{n:,} + {out["dr_count"]:,} double reviews = {out["reviews"]:,} reviews × {i["minutes_per_conversation"]:g} min · capacity {format_hours(out["capacity"])} h ({i["smes"]} SMEs × {i["hours_per_sme"]:g} h)',
@@ -486,7 +514,7 @@ def integrity_check():
 
 def save_plan(workspace, inputs):
     inputs = validate_plan(inputs)
-    calculated = calculate_response(inputs)
+    calculated = calculate_response(inputs, observed_history=has_observed_history(workspace,inputs['system']))
     integrity = integrity_check()
     if integrity['passed'] != integrity['total']:
         raise PersistenceError('Integrity check failed. Plan was not saved.')
@@ -511,11 +539,15 @@ def save_plan(workspace, inputs):
         }
         write_json(folder / f'plan_v{version}.json', record, immutable=True)
         report_path = folder / 'report.html'
-        regenerate_report(folder, version)
+        try:
+            regenerate_report(folder, version)
+            write_log(workspace)
+        except PersistenceError as exc:
+            raise PersistenceError(f'Plan version {version} saved in {folder}; report/log regeneration failed. Existing records are safe. Retry GET /api/log/rebuild for the log. {exc}') from exc
         return {'plan_id':folder.name,'version':version,'folder':str(folder),'report_path':str(report_path)}
 
 
-def build_report(record):
+def build_report(record, actuals=None):
     def text(value):
         return escape(str(value))
     def table(values):
@@ -559,8 +591,20 @@ def build_report(record):
         section('Arithmetic',listing(record['method']['arithmetic'])),
         section('Formulas and constants',table(record['method']['formulas'])+table(record['method']['constants']['Z'])),
         section('References',listing(REFERENCES)),
-        '</body></html>',
     ])
+    if actuals is not None:
+        actual_output = actuals['outputs']
+        parts.append(section('Actuals',
+            '<p>Actuals version '+str(actuals['version'])+' · Recorded at '+text(actuals['recorded_at'])
+            +' · Recorded against plan version '+str(actuals['plan_version'])+'</p>'
+            + table({'Observed rate':actual_output['display']['observed_rate'],
+                     'Achieved margin or bound':actual_output['display']['achieved_margin'],
+                     'Certify status':actual_output['certify_status'],
+                     'Agreement':actual_output['display']['agreement']})
+            + table(actual_output['planned_vs_actual'])+'<h3>Notes</h3><p style="white-space:pre-wrap">'
+            +text(actuals['inputs']['notes'])+'</p>'
+            +listing([w['code']+': '+w['message'] for w in actuals['warnings']])))
+    parts.append('</body></html>')
     return ''.join(parts)
 
 
@@ -568,7 +612,7 @@ def regenerate_report(folder, version):
     path = Path(folder) / f'plan_v{version}.json'
     try:
         record = json.loads(path.read_text(encoding='utf-8'))
-        atomic_write(Path(folder) / 'report.html', build_report(record))
+        atomic_write(Path(folder) / 'report.html', build_report(record, latest_record(folder,'actuals')))
     except (OSError, ValueError, KeyError, TypeError) as exc:
         raise PersistenceError(f'Cannot regenerate report from {path}: {exc}') from exc
 
@@ -600,9 +644,11 @@ def saved_folder(workspace, plan_id):
     return workspace_path(workspace, plan_id)
 
 
-def latest_record(folder, kind):
+def latest_record(folder, kind, requested_version=None):
     versions = [(int(m[1]),p) for p in Path(folder).iterdir()
                 if (m := re.fullmatch(kind+r'_v(\d+)\.json', p.name))]
+    if requested_version is not None:
+        versions = [pair for pair in versions if pair[0]==requested_version]
     if not versions:
         return None
     version, path = max(versions)
@@ -674,6 +720,194 @@ def list_plans(workspace):
     return rows
 
 
+def system_history(workspace, system):
+    plans, actuals = [], []
+    for row in list_plans(workspace):
+        if row['unreadable'] or system_key(row['system']) != system_key(system):
+            continue
+        detail = read_plan(workspace,row['plan_id'])
+        plans.append(detail['plan'])
+        actual = detail['actuals']
+        if actual is not None:
+            try:
+                obs = actual['outputs']['observed_rate']
+                if type(obs) not in (float,int) or not math.isfinite(obs) or not 0 <= obs <= 1:
+                    continue
+                datetime.datetime.fromisoformat(actual['recorded_at'])
+                actuals.append(actual)
+            except (ValueError,KeyError,TypeError):
+                continue
+    return plans, actuals
+
+
+def has_observed_history(workspace, system):
+    return bool(system_history(workspace,system)[1])
+
+
+def prefill(workspace, system):
+    plans, actuals = system_history(workspace,system)
+    if not plans:
+        return {}
+    plan = max(plans,key=lambda p:datetime.datetime.fromisoformat(p['saved_at']))
+    actual = max(actuals,key=lambda a:datetime.datetime.fromisoformat(a['recorded_at'])) if actuals else None
+    source = 'last_observed' if actual else 'last_planned'
+    defaults = initial_inputs()
+    i = dict(plan['inputs'])
+    i.update(N=None,system=plan['plan']['system'],period_type=plan['plan']['period_type'],
+             p=max(actual['outputs']['observed_rate'],.001) if actual else i['p'],p_source=source)
+    iso = datetime.date.today().isocalendar()
+    i['period_label'] = defaults['period_label'] if i['period_type']=='month' else f'{iso.year:04d}-W{iso.week:02d}'
+    provenance = f'{plan["plan"]["plan_id"]} (v{plan["plan"]["version"]})'
+    i['prefilled_from'] = provenance
+    return {'inputs':i,'prefilled_from':provenance,'p_source':source,
+            'actuals_recorded_at':actual['recorded_at'] if actual else None}
+
+
+def validate_actuals(plan, data):
+    if not isinstance(data,dict):
+        raise ValidationError({'actuals':'Enter actual review results.'})
+    errors, normalized = {}, {}
+    N = plan['inputs']['N']
+    for field, minimum, maximum in [('reviewed',1,N),('issues',0,data.get('reviewed'))]:
+        value = data.get(field)
+        if type(value) is not int or type(maximum) is not int or not minimum <= value <= maximum:
+            errors[field] = 'Enter an integer from 1 to population N.' if field=='reviewed' else 'Enter an integer from 0 to reviewed.'
+        else:
+            normalized[field] = value
+    agreement = data.get('agreement')
+    if type(agreement) not in (int,float) or not math.isfinite(agreement) or not 0 <= agreement <= 1:
+        errors['agreement'] = 'Enter agreement from 0% to 100%.'
+    else:
+        normalized['agreement'] = agreement
+    notes = data.get('notes','')
+    if not isinstance(notes,str):
+        errors['notes'] = 'Notes must be text.'
+    else:
+        normalized['notes'] = notes
+    if errors:
+        raise ValidationError(errors)
+    return normalized
+
+
+def plan_reference(workspace, data):
+    if not isinstance(data,dict):
+        raise ValidationError({'actuals':'Enter actual review results.'})
+    folder = saved_folder(workspace,data.get('plan_id'))
+    version = data.get('plan_version')
+    if version is not None and (type(version) is not int or version < 1):
+        raise ValidationError({'plan_version':'Choose a saved plan version.'})
+    if not folder.is_dir():
+        return None
+    return latest_record(folder,'plan',version)
+
+
+def save_actuals(workspace, plan_id, data):
+    if not isinstance(data,dict):
+        raise ValidationError({'actuals':'Enter actual review results.'})
+    with workspace_lock(workspace):
+        plan = plan_reference(workspace,{**data,'plan_id':plan_id})
+        if plan is None:
+            return None
+        inputs = validate_actuals(plan,data)
+        calculated = calculate_actuals(plan,inputs)
+        folder = saved_folder(workspace,plan_id)
+        versions = [int(m[1]) for p in folder.iterdir() if (m:=re.fullmatch(r'actuals_v(\d+)\.json',p.name))]
+        version = max(versions,default=0)+1
+        record = {'schema_version':1,'tool':dict(plan['tool']),
+                  'recorded_at':datetime.datetime.now().astimezone().isoformat(),
+                  'plan_id':plan_id,'plan_version':plan['plan']['version'],'version':version,
+                  'inputs':inputs,**calculated}
+        write_json(folder/f'actuals_v{version}.json',record,immutable=True)
+        try:
+            latest = latest_record(folder,'plan')
+            regenerate_report(folder,latest['plan']['version'])
+            write_log(workspace)
+        except PersistenceError as exc:
+            raise PersistenceError(f'Actuals version {version} saved in {folder}; report/log regeneration failed. Existing records are safe. Retry GET /api/log/rebuild for the log. {exc}') from exc
+        return {'version':version,'report_path':str(folder/'report.html')}
+
+
+def write_log(workspace):
+    rows = []
+    for summary in list_plans(workspace):
+        if summary['unreadable']:
+            print(f'Skipped unreadable {summary["plan_id"]}: {summary["unreadable"]}'.replace('\n',' ').replace('\r',' '))
+            continue
+        detail = read_plan(workspace,summary['plan_id'])
+        p, actual = detail['plan'], detail['actuals']
+        row = {**p['plan'],**p['inputs'],**p['outputs'],'plan_version':p['plan']['version'],'saved_at':p['saved_at']}
+        trade = p['outputs']['tradeoff']
+        row.update(n_max_at_capacity=trade['n_max'] if trade else None,
+                   margin_at_capacity=trade['margin_at_capacity'] if trade else None,
+                   threshold_at_capacity=trade['threshold_at_capacity'] if trade else None)
+        warnings = [w['code'] for w in p['warnings']]
+        if actual:
+            row.update(actuals_version=actual['version'],recorded_at=actual['recorded_at'],
+                       **actual['inputs'],**{k:actual['outputs'][k] for k in ('observed_rate','achieved_margin','certify_status')})
+            warnings.extend(w['code'] for w in actual['warnings'])
+        row['warnings'] = ';'.join(dict.fromkeys(warnings))
+        rows.append(row)
+    rows.sort(key=lambda r:(r['system'],r['plan_id']))
+    rows.sort(key=lambda r:r['period_label'],reverse=True)
+    stream = io.StringIO(newline='')
+    writer = csv.DictWriter(stream,fieldnames=CSV_COLUMNS,extrasaction='ignore')
+    writer.writeheader()
+    writer.writerows(rows)
+    path = Path(workspace).resolve()/'plans_log.csv'
+    atomic_write(path,stream.getvalue(),encoding='utf-8-sig')
+    return {'path':str(path),'rows':len(rows)}
+
+
+def rebuild_log(workspace):
+    with workspace_lock(workspace):
+        return write_log(workspace)
+
+
+def calculate_actuals(plan, data):
+    a = validate_actuals(plan,data)
+    i, planned = plan['inputs'], plan['outputs']
+    reviewed, issues = a['reviewed'], a['issues']
+    obs = issues / reviewed
+    threshold = inverse_threshold(reviewed,i['confidence'])
+    margin = reverse_margin(i['N'],reviewed,obs,i['confidence']) if 0 < obs < 1 else None
+    relative = margin / obs if margin is not None and i['margin_mode']=='relative' else None
+    bound = None
+    if issues == 0:
+        bound = f'No issues found — with {i["confidence"]*100:.0f}% confidence the true rate is below {format_percent(threshold,True)}.'
+    elif issues == reviewed:
+        bound = f'Every reviewed conversation showed the issue — with {i["confidence"]*100:.0f}% confidence the true rate is above {format_percent(1-threshold,True)}.'
+    status = ('not planned' if not i['certify'] else
+              'not applicable (issues found; report the observed rate)' if issues > 0 else
+              'met' if threshold <= i['threshold'] else f'not met — can certify below {format_percent(threshold,True)} only')
+    warnings = []
+    def warn(code,message):
+        warnings.append({'code':code,'severity':'yellow','message':message})
+    if reviewed < planned['n_headline']:
+        warn('W8',f'Fewer conversations were reviewed ({reviewed:,}) than planned ({planned["n_headline"]:,}). The achieved margin is ±{format_percent(margin)}, not the planned ±{format_percent(planned["E_effective"])}.')
+    if obs > 2*i['p'] or obs < .5*i['p']:
+        warn('W9',f'The observed rate ({format_percent(obs,True)}) is far from the planned expectation ({format_percent(i["p"],True)}). Next cycle\'s p will move; treat this cycle\'s precision claim with care.')
+    if a['agreement'] < .8:
+        warn('W10',f'Double-review agreement is {format_percent(a["agreement"])}, below 80%. Reviewer consistency is low — calibrate before relying on the rate.')
+    outputs = {'observed_rate':obs,'achieved_margin':margin,'achieved_margin_relative':relative,
+               'bound_statement':bound,'certify_status':status,
+               'planned_vs_actual':{'n_planned':planned['n_headline'],'reviewed':reviewed,
+                                    'margin_planned':planned['E_effective'],'margin_achieved':margin,
+                                    'certify_planned':i['certify'],'certify_status':status,
+                                    'dr_planned':planned['dr_count'],'agreement':a['agreement']},
+               'display':{'observed_rate':format_percent(obs,True),
+                          'achieved_margin':bound if bound else '±'+format_percent(margin)
+                              + (f' (±{format_percent(relative)} relative)' if relative is not None else ''),
+                          'certify_status':status,'agreement':format_percent(a['agreement'])}}
+    outputs['display']['comparison'] = [
+        {'label':'Conversations','planned':format_count(planned['n_headline']),'actual':format_count(reviewed)},
+        {'label':'Margin','planned':'±'+format_percent(planned['E_effective']),
+         'actual':outputs['display']['achieved_margin']},
+        {'label':'Certify claim','planned':('Below '+format_percent(i['threshold'],True)) if i['certify'] else 'not planned','actual':status},
+        {'label':'Double review / agreement','planned':format_count(planned['dr_count'])+' double reviews','actual':format_percent(a['agreement'])+' agreement'},
+    ]
+    return {'outputs':outputs,'warnings':warnings}
+
+
 def plan_folder(workspace, period, system):
     if not re.fullmatch(r'\d{4}-(?:\d{2}|W\d{2})', period):
         raise PersistenceError('Invalid period for plan folder.')
@@ -709,7 +943,7 @@ def atomic_write(path, text, encoding='utf-8', immutable=False):
         if path.exists() and (immutable or re.fullmatch(r'(?:plan|actuals)_v\d+\.json', path.name)):
             raise PersistenceError(f'Record already exists: {path}. Save a new version.')
         with tempfile.NamedTemporaryFile(mode='w', encoding=encoding, dir=path.parent,
-                                         prefix=path.name + '.', suffix='.tmp', delete=False) as stream:
+                                         prefix=path.name + '.', suffix='.tmp', delete=False, newline='') as stream:
             temporary = Path(stream.name)
             stream.write(text)
             stream.flush()
@@ -796,12 +1030,43 @@ def create_app(config=None):
     def plans():
         return jsonify(list_plans(config['workspace']))
 
+    @app.get('/api/systems')
+    def systems():
+        names = {}
+        for row in list_plans(config['workspace']):
+            if not row['unreadable']:
+                names.setdefault(system_key(row['system']),row['system'])
+        return jsonify(sorted(names.values(),key=system_key))
+
+    @app.get('/api/prefill')
+    def prefill_system():
+        return jsonify(prefill(config['workspace'],request.args.get('system','')))
+
     @app.get('/api/plans/<plan_id>')
     def plan_detail(plan_id):
         detail = read_plan(config['workspace'], plan_id)
         if detail is None:
             return jsonify(error='Saved plan was not found.'), 404
         return jsonify(detail)
+
+    @app.post('/api/actuals/calc')
+    def actuals_calc():
+        data = request.get_json(silent=True)
+        plan = plan_reference(config['workspace'],data)
+        if plan is None:
+            return jsonify(error='Saved plan version was not found.'), 404
+        return jsonify(calculate_actuals(plan,data))
+
+    @app.post('/api/plans/<plan_id>/actuals')
+    def record_actuals(plan_id):
+        result = save_actuals(config['workspace'],plan_id,request.get_json(silent=True))
+        if result is None:
+            return jsonify(error='Saved plan version was not found.'), 404
+        return jsonify(result)
+
+    @app.get('/api/log/rebuild')
+    def log_rebuild():
+        return jsonify(rebuild_log(config['workspace']))
 
     def open_resource(kind):
         data = request.get_json(silent=True)
@@ -825,7 +1090,8 @@ def create_app(config=None):
 
     @app.post('/api/calc')
     def calc():
-        return jsonify(calculate_response(request.get_json(silent=True)))
+        inputs = validate_plan(request.get_json(silent=True))
+        return jsonify(calculate_response(inputs,observed_history=has_observed_history(config['workspace'],inputs['system'])))
 
     return app
 
