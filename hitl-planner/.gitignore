@@ -1,0 +1,20 @@
+# Local runtime state (never commit user data)
+config.json
+.venv/
+__pycache__/
+.pytest_cache/
+.coverage
+htmlcov/
+*.pyc
+*.tmp
+*.log
+# Workspace lives outside repository by default; prevent accidental local copy commit
+HITL Planner/
+plans_log.csv
+plan_v[0-9]*.json
+actuals_v[0-9]*.json
+report.html
+
+.python/
+.test-work/
+.uv-cache/
